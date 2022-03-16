@@ -1,0 +1,543 @@
+---
+title: "Manuscript analyses"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type= "text/css">
+
+.## Figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+## Table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+options(gtsummary.print_engine = "gt")
+options(gtsummary.as_gt.addl_cmds = "gt::tab_options(table.font.size = 14, data_row.padding = gt::px(1))")
+```
+
+```{r library}
+library(tidyverse)
+library(ggplot2)
+library(gtsummary)
+library(labelled)
+# library(survival)
+# library(survminer)
+```
+
+```{r load}
+path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Cytopenias")
+
+Characteristics <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Characteristics", skip = 1, n_max = 54) %>% 
+  mutate(MRN = as.character(MRN),
+         MRN = coalesce(MRN, PT))
+Counts <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Counts") %>% 
+  mutate(MRN = as.character(MRN),
+         MRN = coalesce(MRN, PT))
+Infections <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Infections") %>% 
+  mutate(MRN = as.character(MRN),
+         MRN = coalesce(MRN, PT))
+Support <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Support") %>% 
+  mutate(MRN = as.character(MRN),
+         MRN = coalesce(MRN, PT))
+Pneumo_titers <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Pneumo Titers") %>% 
+  mutate(MRN = as.character(MRN))
+Other_titers <-
+  readxl::read_xlsx(paste0(path,"/CytopeniaManuscriptData_3.16.22.xlsx"),
+                    sheet = "Other Titers") %>% 
+  mutate(MRN = as.character(MRN))
+```
+
+
+
+```{r join}
+cart <- full_join(Characteristics, Counts, by = c("PT", "MRN")) %>% 
+  full_join(., Infections, by = c("PT", "MRN")) %>% 
+  full_join(., Support, by = c("PT", "MRN", "Date of CAR T infusion")) %>% 
+  full_join(., Pneumo_titers, by = c("PT", "MRN")) %>% 
+  select(-`Date of leukapheresis.y`, `Date of leukapheresis` = `Date of leukapheresis.x`) %>% 
+  full_join(., Other_titers, by = c("PT", "MRN"))
+```
+
+
+```{r data cleaning}
+cart1 <- cart %>% 
+  # defining BMI categories
+  mutate(bmicat = case_when(
+    `BMI at apheresis` < 25             ~ "< 25 kg/m2",
+    `BMI at apheresis` >= 25 & 
+      cart$`BMI at apheresis` < 30      ~ "25 to < 30 kg/m2",
+    `BMI at apheresis` >= 30            ~ "≥ 30 kg/m2"
+  ),
+  bmicat = factor(bmicat, levels = c("< 25 kg/m2", "25 to < 30 kg/m2", "≥ 30 kg/m2"))
+  ) %>% 
+  mutate(bmicat2 = case_when(
+    `BMI at apheresis` < 25             ~ "< 25 kg/m2",
+    `BMI at apheresis` >= 25            ~ "≥ 25 kg/m2"
+  ),
+  bmicat2 = factor(bmicat2, levels = c("< 25 kg/m2", "≥ 25 kg/m2"))
+  ) %>% 
+  # age categories
+  mutate(agecat = case_when(
+    Age < 65                            ~ "< 65 years",
+    Age >= 65                           ~ "≥ 65 years"
+  ),
+  agecat = factor(agecat, levels = c("< 65 years", "≥ 65 years"))
+  ) %>% 
+  mutate_at(c("Extramedullary Disease? (yes=1, no=0)",
+              "ECOG > or = 2? (Yes=1, No=0)",
+              "Deletion 17p prior to CAR-T infusion (yes=1, no=0)",
+              "t(4:14) prior to CAR-T infusion (yes=1, no=0)",
+              "t(14:16) prior to CAR-T infusion (yes=1, no=0)",
+              "Bridging Therapy (Yes=1, No=0)",
+              "Prior auto SCT (yes=1, no=0)",
+              "Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)"), 
+            ~ case_when(
+              . == 1                                              ~ "YES",
+              . == 0                                              ~ "NO",
+              TRUE                                                ~ NA_character_
+            )) %>% 
+  # tumor burden
+  mutate(tumor_burden = case_when(
+    `High Marrow Burden? (yes=1, no=0)` == "NO" ~ "Low",
+    `High Marrow Burden? (yes=1, no=0)` == "YES" ~ "High"),
+    tumor_burden = factor(tumor_burden, levels = c("Low", "High"))
+  ) %>% 
+  # ECOG
+  mutate(`ECOG at LD (at baseline visit)` = case_when(
+    `ECOG at LD (at baseline visit)` == 0 | 
+      `ECOG at LD (at baseline visit)` ==1 ~ "0-1"
+  )) %>% 
+  # cytogenetics
+  mutate(cyto = case_when(
+    `ECOG > or = 2? (Yes=1, No=0)` == "YES" | 
+      `t(4:14) prior to CAR-T infusion (yes=1, no=0)` == "YES" | 
+      `t(14:16) prior to CAR-T infusion (yes=1, no=0)` == "YES"      ~ "YES",
+    `ECOG > or = 2? (Yes=1, No=0)` == "NO" &
+      `t(4:14) prior to CAR-T infusion (yes=1, no=0)` == "NO" &
+      `t(14:16) prior to CAR-T infusion (yes=1, no=0)` == "NO"       ~ "NO"
+  )) %>% 
+  # refractory status
+  mutate_at(c("Lenalidomide (exposed=0 vs. refractory=1)",
+              "Bortezomib (exposed=0 vs. refractory=1)",
+              "Carfilzomib (exposed=0 vs. refractory=1)",
+              "Pomalidomide (exposed=0 vs. refractory=1)",
+              "Daratumumab (exposed=0 vs. refractory=1)"), 
+            ~ case_when(
+              . == 1                                              ~ "Refractory",
+              . == 0                                              ~ "Exposed",
+              TRUE                                                ~ NA_character_
+            )) %>% 
+  mutate(immuno = case_when(
+    `Lenalidomide (exposed=0 vs. refractory=1)` == "Exposed" &
+      `Pomalidomide (exposed=0 vs. refractory=1)` == "Exposed"        ~ "NO",
+    `Lenalidomide (exposed=0 vs. refractory=1)` == "Refractory" |
+      `Pomalidomide (exposed=0 vs. refractory=1)` == "Refractory"     ~ "YES"
+  )) %>% 
+  mutate(proteasome = case_when(
+    `Bortezomib (exposed=0 vs. refractory=1)` == "Exposed" &
+      `Bortezomib (exposed=0 vs. refractory=1)` == "Exposed"      ~ "NO",
+    `Bortezomib (exposed=0 vs. refractory=1)` == "Refractory" |
+      `Bortezomib (exposed=0 vs. refractory=1)` == "Refractory"   ~ "YES"
+  )) %>% 
+  mutate(dara = case_when(
+    `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"      ~ "YES",
+    `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"             ~ "NO"
+  )) %>% 
+  mutate(doubleref = case_when(
+    proteasome == "NO" | 
+      immuno == "NO"                                              ~ "NO",
+    proteasome == "YES" &
+      immuno == "YES"                                         ~ "YES"
+  )) %>% 
+  mutate(tripleref = case_when(
+    proteasome == "NO" | 
+      immuno == "NO" |
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"      ~ "NO",
+    proteasome == "YES" &
+      immuno == "YES" &
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"        ~ "YES"
+  )) %>% 
+  mutate(pentaref = case_when(
+    `Bortezomib (exposed=0 vs. refractory=1)` == "Exposed" | 
+      `Carfilzomib (exposed=0 vs. refractory=1)` == "Exposed" |
+      `Lenalidomide (exposed=0 vs. refractory=1)` == "Exposed" | 
+      `Pomalidomide (exposed=0 vs. refractory=1)` == "Exposed" | 
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"     ~ "NO",
+    `Bortezomib (exposed=0 vs. refractory=1)` == "Refractory" & 
+      `Carfilzomib (exposed=0 vs. refractory=1)` == "Refractory" &
+      `Lenalidomide (exposed=0 vs. refractory=1)` == "Refractory" & 
+      `Pomalidomide (exposed=0 vs. refractory=1)` == "Refractory" & 
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"  ~ "YES"
+  )) %>% 
+# CRS 
+  mutate(CRS_any = ifelse(`Max CRS grade (0-5)` == 0, "NO", "YES"),
+         CRS_any2 = ifelse(CRS_any== "NO", 0, 1),
+         CRS_gradecat = case_when(
+           `Max CRS grade (0-5)` == 0                             ~ "No CRS",
+           `Max CRS grade (0-5)` == 1                             ~ "Grade 1 or 2",
+           `Max CRS grade (0-5)` == 2                             ~ "Grade 1 or 2",
+           `Max CRS grade (0-5)` >= 3                             ~ "Grade ≥3"),
+         CRS_gradecat = factor(CRS_gradecat, levels = c("No CRS", "Grade 1 or 2", "Grade ≥3"))
+  ) %>% 
+  # mutate( = case_when(
+  #    == 30                ~ NA,
+  #   TRUE                          ~ CRS_fup
+  # )) %>% 
+  # ICANS 
+  mutate(ICANS_any = ifelse(`Max ICANS (relative to infusion)` == 0, "NO", "YES"),
+         ICANS_any2 <- ifelse(ICANS_any == "NO", 0, 1),
+         ICANS_gradecat = case_when(
+           `Max ICANS (relative to infusion)` == 0 ~              "No ICANS",
+           `Max ICANS (relative to infusion)` == 1 ~              "Grade 1 or 2",
+           `Max ICANS (relative to infusion)` == 2 ~              "Grade 1 or 2",
+           `Max ICANS (relative to infusion)` >= 3 ~              "Grade ≥3"),
+         ICANS_gradecat = factor(ICANS_gradecat, levels = c("No ICANS", "Grade 1 or 2", "Grade ≥3"))
+  )
+
+  
+  
+  
+
+
+
+
+
+
+# # CrCl
+# table(cart$`Baseline CrCl`)
+# cart$crcl[cart$`Baseline CrCl` == ">70" | cart$`Baseline CrCl` == "60.8" | cart$`Baseline CrCl` == "62" | cart$`Baseline CrCl` == "67"] <- ">60"
+# cart$crcl[cart$`Baseline CrCl` == "25" | cart$`Baseline CrCl` == "27" | cart$`Baseline CrCl` == "34" | cart$`Baseline CrCl` == "41" | cart$`Baseline CrCl` == "43" | cart$`Baseline CrCl` == "50" | cart$`Baseline CrCl` == "54" | cart$`Baseline CrCl` == "55"] <- "≤60"
+# table(cart$crcl)
+# # CRS
+# table(cart$`Max CRS grade (0-5)`)
+# as.factor(cart$`Max CRS grade (0-5)`)
+# table(cart$`Duration of CRS (days)`)
+# table(cart$`Duration of ICANS (days)`)
+# # steroid use
+# table(cart$`Steroid use(Yes, No)`)
+# 
+# 
+# 
+# # dose reduction
+# cart$`Fludarabine Dose Reduction`[cart$`Fludarabine Dose Reduction` == "YES (HD)"] <- "YES"
+# table(cart$`Fludarabine Dose Reduction`)
+# 
+# # RSS
+# table(cart$`R-ISS at CAR-T Infusion`)
+# cart$`R-ISS at CAR-T Infusion`[cart$`R-ISS at CAR-T Infusion` == "R-ISS  II"] <- "R-ISS II"
+
+
+# day 30 + MRD for figure
+#table(tct$day30_response_revised, tct$MRD_status, useNA= "ifany")
+#table(tct$day30_response_revised, tct$day30_response, useNA= "ifany")
+#tct$ORR_MRD <- case_when(#tct$day30_response_revised== "SD" ~ "SD",
+                         #tct$day30_response_revised== "PD" ~ "PD",
+                         #tct$day30_response_revised== "MR" ~ "MR",
+#                         tct$day30_response_revised== "PR" ~ "PR",
+                         #tct$day30_response_revised== "PR" & tct$MRD_status== "Positive" ~ "PR and MRD-positive",
+                         #tct$day30_response_revised== "PR" & is.na(tct$MRD_status) ~ "PR and MRD unknown",
+#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Negative" ~ "sCR and MRD-negative",
+#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Positive" ~ "sCR and MRD-positive")
+#table(tct$ORR_MRD)
+## Labeling
+var_label(cart1) <- list(Age = "Patient Age", agecat = "Patient Age - Categories", bmicat = "BMI at apheresis - Normal, Overweight, Obese", 
+                         tumor_burden = "Tumor burden", proteasome = "Refractory to Proteasome Inhibitors", 
+                         immuno = "Refractory to Immunomodulators", doubleref = "Double refractory", 
+                         tripleref= "Triple refractory", pentaref= "Penta refractory",
+                         bmicat2 = "BMI at apheresis - Normal vs. Overweight/Obese", CRS_any = "Any CRS", CRS_gradecat = "CRS Grade", 
+                         ICANS_any = "Any ICANS", ICANS_gradecat = "ICANS Grade", cyto= "High risk cytogenetics", 
+                         `ECOG > or = 2? (Yes=1, No=0)` = "Deletion 17p at Infusion", 
+                         `t(4:14) prior to CAR-T infusion (yes=1, no=0)` = "t(4:14) at Infusion", `t(14:16) prior to CAR-T infusion (yes=1, no=0)` = "t(4:16) at Infusion", 
+                         `Prior auto SCT (yes=1, no=0)` = "Prior auto SCT", `Extramedullary Disease? (yes=1, no=0)` = "Extramedullary disease", dara= "Refractory to Daratumumab") 
+
+```
+
+<br>
+
+
+### Tables
+
+## Table 1. Patient baseline characteristics
+```{r}
+selected <- cart1 %>% 
+  select(Age, agecat, Sex, `BMI at apheresis`, bmicat, bmicat2, `Extramedullary Disease? (yes=1, no=0)`, tumor_burden, `ECOG at LD (at baseline visit)`, `R-ISS at CAR-T Infusion`, `ECOG > or = 2? (Yes=1, No=0)`, `t(4:14) prior to CAR-T infusion (yes=1, no=0)`, `t(14:16) prior to CAR-T infusion (yes=1, no=0)`, cyto, `Bridging Therapy (Yes=1, No=0)`, `Number of prior lines of therapy`, `Prior auto SCT (yes=1, no=0)`, immuno, proteasome, dara, doubleref, tripleref, pentaref, CRS_any, CRS_gradecat, `Duration of CRS (days)`, ICANS_any, ICANS_gradecat, `Duration of ICANS (days)`, `Infection (yes, no)`, `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`, 
+                             # `Baseline CRP`, `Max CRP`, `Baseline Ferritin`, `Max Ferritin`, `Cell Dose (million cells)`, 
+                             # `LDH at Baseline`, 
+                             `LDH day +30`, `LDH day +90`#, 
+                             # `B2 Microglobulin at Baseline`, `Day 30 B2 Microglobulin`, `Day 90 B2 Microglobulin`, `Cyclophosphamide Dose (mg)`, `Cyclophosphamide Actual Dose (mg/m2)`, `Fludarabine Total Dose (mg)`, `Fludarabine Actual Dose (mg/m2)`, `Fludarabine Dose Reduction`
+                             )
+# write.csv(selected,"/Volumes/Peres_Research/Myeloma/CART/selected_data.csv", row.names = TRUE)
+selected %>% 
+  tbl_summary(
+            statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
+            digits = all_continuous() ~ 1) %>% 
+  bold_labels() %>% add_stat_label() %>% 
+             #modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
+  # use `modify_footnote(everything() ~ NA, abbreviation = TRUE)` to delete abbrev. footnotes
+  modify_footnote(update = everything() ~ NA)
+```
+
+
+<!-- Age (years)	 -->
+<!--      Median (range)	 -->
+<!--      60 – n (%)	 -->
+<!-- Male sex – n (%)	 -->
+<!-- Extramedullary disease – n (%)	 -->
+<!-- High marrow burden (≥50%) – n (%)	 -->
+<!-- ECOG performance status at lymphodepletion – n (%)	 -->
+<!--      0	 -->
+<!--      1	 -->
+<!--      2	 -->
+<!--      3	 -->
+<!-- R-ISS stage – n (%)	 -->
+<!--      I	 -->
+<!--      II	 -->
+<!--      III	 -->
+<!--      Unknown	 -->
+<!-- High-risk cytogenetics – n (%)	 -->
+<!--      del(17p)	 -->
+<!--      t(4;14)	 -->
+<!--      t(14;16)	 -->
+<!--      Unknown	 -->
+<!-- Bridging therapy – n (%)	 -->
+<!-- Prior anti-myeloma regimens – median (range)	 -->
+<!--      Prior autoSCT – n (%)	 -->
+<!--      Prior alloSCT – n (%)	 -->
+<!--      Prior BCMA-directed therapy – n (%)	 -->
+<!-- Refractory status – n (%)	 -->
+<!--      Immunomodulatory agent	 -->
+<!--      Proteasome inhibitor	 -->
+<!--      Daratumumab	 -->
+<!--      Double-refractory disease	 -->
+<!--      Triple-refractory disease	 -->
+<!--      Penta-refractory disease	 -->
+<!-- Eligible for KarMMa 1 trial at apheresis – n (%)	 -->
+
+## Table 2. Clinical outcomes
+
+<!-- CRS maximum grade – n (%)	 -->
+<!--      0	 -->
+<!--      1	 -->
+<!--      2	 -->
+<!--      3	 -->
+<!--      4	 -->
+<!--      5	 -->
+<!-- Time to CRS onset (days) – median (range)	 -->
+<!-- Time to maximum severity CRS (days) – median (range)	 -->
+<!-- Duration of CRS (days) – median (range)	 -->
+<!-- ICANS maximum grade – n (%)	 -->
+<!--      0	 -->
+<!--      1	 -->
+<!--      2	 -->
+<!--      3	 -->
+<!--      4	 -->
+<!--      5	 -->
+<!-- Time to ICANS onset (days) – median (range)	 -->
+<!-- Time to maximum severity ICANS (days) – median (range)	 -->
+<!-- Duration of ICANS (days) – median (range)	 -->
+<!-- Treatment for toxicity – n (%)	 -->
+<!--      Steroid use	 -->
+<!--      Tocilizumab use	 -->
+<!--      Anakinra use	 -->
+<!-- Day 30 response – n (%)	 -->
+<!--      ORR	 -->
+<!--      CR or sCR	 -->
+<!--           MRD negative	 -->
+<!--      VGPR	 -->
+<!--      PR	 -->
+<!-- Day 90 response – n (%)	 -->
+<!--      ORR	 -->
+<!--      CR or sCR	 -->
+<!--           MRD negative	 -->
+<!--      VGPR	 -->
+<!--      PR	 -->
+<!-- Best response in first 90 days – n (%)	 -->
+<!--      CR or sCR	 -->
+<!--           MRD negative	 -->
+<!--      VGPR	 -->
+<!--      PR	 -->
+
+For responses make denominator evaluable patients
+Patient who died or was lost to follow-up or had non-secretory disease would not be evaluable
+
+## Table 3. Bone marrow biopsy findings
+
+<!-- 	Baseline (n=52)	Day 30 (n=44)	Day 90 (n=32) -->
+<!-- Marrow cellularity – n (%)			 -->
+<!--      Hypocellular			 -->
+<!--      Normocellular			 -->
+<!--      Hypercellular			 -->
+<!--      Variable			 -->
+<!-- Marrow cellularity (%) – median (range)			 -->
+<!-- % CD138 positive by IHC – median (range)			 -->
+<!-- Fibrosis grade – median (range)			 -->
+<!-- Dysplasia present – n (%)			 -->
+
+## Table 4. Supportive therapies and engraftment
+
+<!-- Granulocyte colony stimulating factor (G-CSF)	 -->
+<!--      G-CSF administered – n (%)	 -->
+<!--      First day of G-CSF – median (range)	 -->
+<!--      Last day of G-CSF – median (range)	 -->
+<!-- CD34 stem cell boost	 -->
+<!--      Stem cell boost administered – n (%)	 -->
+<!--      Day of stem cell boost – median (range)	 -->
+<!--      Dose of stem cell boost (million cells) – median (range)	 -->
+<!-- Engraftment day – median (range)	 -->
+<!-- Transfusions post-CART – n (%)	 -->
+<!--      RBC transfusion within 7 days	 -->
+<!--      Plt transfusion within 7 days	 -->
+<!--      RBC transfusion >7 days	 -->
+<!--      Plt transfusion >7 days	 -->
+<!-- Intravenous immunoglobulin (IVIG)	 -->
+<!--      IVIG administered – n (%)	 -->
+<!--      First day of IVIG – median (range)	 -->
+<!--      Last day of IVIG – median (range)	 -->
+
+## Table S1. Apheresis and product characteristics
+
+<!-- Collection goal (TBV) – median (range)	 -->
+<!-- Whole blood processed (mL) – median (range)	 -->
+<!-- Total blood volume processed (mL) – median (range)	 -->
+<!-- Access type – n (%)	 -->
+<!--      Non-tunneled central venous catheter	 -->
+<!--      Peripheral line	 -->
+<!--      Other	 -->
+<!-- Final collection volume (mL) – median (range)	 -->
+<!-- Run time (minutes) – median (range)	 -->
+<!-- Time from apheresis to product infusion (days) – median (range)	 -->
+<!-- Total bags infused – median (range)	 -->
+<!-- Total dose volume (mL) – median (range)	 -->
+<!-- Total cell dose (million cells) – median (range)	 -->
+
+ 
+## Table S2. Cytopenias following ide-cel
+
+<!-- 	Apheresis	Day -5	Day 0	Day 7	Day 14	Day 21	Day 30	Day 90 -->
+<!-- Leukopenia – n (%)								 -->
+<!--      Any grade								 -->
+<!--      Grade 3+								 -->
+<!-- Neutropenia – n (%)								 -->
+<!--      Any grade								 -->
+<!--      Grade 3+								 -->
+<!-- Anemia – n (%)								 -->
+<!--      Any grade								 -->
+<!--      Grade 3+								 -->
+<!-- Thrombocytopenia – n (%)								 -->
+<!--      Any grade								 -->
+<!--      Grade 3+								 -->
+
+
+## Table S3. Patient characteristics by grade 3+ cytopenia at Day 30
+
+ 
+
+## Table S3. Patient characteristics by grade 3+ cytopenia at Day 90
+
+(Similar to above)
+
+## Table S4. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
+
+ 
+
+
+## Table S4. Details of infections after ide-cel
+
+ 
+
+## Table S5. Patients with infections in the first 30 days by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
+
+ 
+
+## Table S6. Patients with infections in the first 100 days by cell counts and immunoglobulin levels
+
+ 
+
+### Figures
+
+## Figure 1. Consort diagram
+
+ 
+
+## Figure 2. Inflammatory markers after ide-cel
+
+ 
+ 
+ 
+
+## Figure 3. Cellular and humoral immune reconstitution after ide-cel
+
+       
+
+## Figure 4. Cytopenias over time
+
+As discussed at meeting, rather than showing count recovery over time plan to show Grade 3+ cytopenias (Hb, Plt, ANC, WBC) over time (Day –5, Day +30, Day +60, Day +90)
+ 
+
+## Figure 5. Cumulative incidence of infection and infection density
+
+  
+
+## Figure S1. Viral titers after ide-cel
+
+A)	HSV 1/2 IgG
+
+Example from prior cytopenia paper below. We can show this data however you think best
+Interpretation: ≤0.89=negative (not immune)
+                        0.90-1.09=indeterminate (can consider negative for purposes of analysis)
+                        ≥1.10=positive (immune)
+
+
+ 
+
+B)	VZV IgG (positive=immune vs negative or equivocal=not immune)
+
+C)	CMV IgG (positive=immune vs negative=not immune)
+
+## Figure S2. Pneumococcal titers after ide-cel
+
+Antibody concentration >1.0 is considered long-term protection (immune)
+If antibody concentration ≤1.0 consider negative (not immune)
+
+
+
+
+
+
+
+
+
+
