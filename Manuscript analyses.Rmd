@@ -782,9 +782,103 @@ cart1 <- cart %>%
     str_detect(`Day 90 response (sCR, CR, VGPR, PR and MRD+ vs MRD-)`, "MRD") |
     str_detect(`Day 30 Response (sCR, CR, VGPR, PR and MRD+ vs MRD- )`, "MRD")         ~ "No",
     TRUE                             ~ NA_character_
+  )) %>% 
+  
+  
+  mutate(`IgG HSV1/2 apheresis` = case_when(
+    `IgG HSV1/2 apheresis` < 0.9         ~ "Negative",
+    `IgG HSV1/2 apheresis` >= 0.9 &
+      `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
+    `IgG HSV1/2 apheresis` >= 1.10       ~ "Positive",
+  )) %>%
+  mutate(`IgG HSV1/2 D90` = case_when(
+    `IgG HSV1/2 D90` < 0.9         ~ "Negative",
+    `IgG HSV1/2 D90` >= 0.9 &
+      `IgG HSV1/2 D90` < 1.10      ~ "indeterminate",
+    `IgG HSV1/2 D90` >= 1.10       ~ "Positive",
+  )) %>% 
+  mutate_at(c("VZV IgG apheresis",
+              "VZV IgG D90 (1=pos, 0=neg)",
+              "CMV IgG apheresis",
+              "CMV IgG D90 (1=pos, 0=neg)"), 
+            ~ case_when(
+              . == 1                                              ~ "Positive",
+              . == 0                                              ~ "Negative",
+              . == "Equivocal"                                    ~ "Negative",
+              TRUE                                                ~ as.character(.)
+            )) %>% 
+  mutate_at(c("IgG HSV1/2 apheresis",
+              "IgG HSV1/2 D90",
+              "VZV IgG apheresis",
+              "VZV IgG D90 (1=pos, 0=neg)",
+              "CMV IgG apheresis",
+              "CMV IgG D90 (1=pos, 0=neg)"),
+            ~ factor(., levels = c("Positive", "Negative"))) %>% 
+  mutate(across(starts_with("Pneumo"), ~ case_when(
+    . <= 1                                                    ~ "Negative",
+    . > 1                                                     ~ "Positive"
+  ))) %>% 
+
+  mutate(igg_hsv_change = case_when(
+    `IgG HSV1/2 apheresis` == "Positive" &
+      `IgG HSV1/2 D90` == "Negative"         ~ -1,
+    `IgG HSV1/2 apheresis` == "Negative" &
+      `IgG HSV1/2 D90` == "Positive"         ~ 1,
+    `IgG HSV1/2 apheresis` == "Negative" &
+      `IgG HSV1/2 D90` == "Negative"         ~ -0.25,
+    `IgG HSV1/2 apheresis` == "Positive" &
+      `IgG HSV1/2 D90` == "Positive"         ~ 0.25
+  )) %>% 
+  mutate(igg_vzv_change = case_when(
+    `VZV IgG apheresis` == "Positive" &
+      `VZV IgG D90 (1=pos, 0=neg)` == "Negative"               ~ -1,
+    `VZV IgG apheresis` == "Negative" &
+      `VZV IgG D90 (1=pos, 0=neg)` == "Positive"               ~ 1,
+    `VZV IgG apheresis` == "Negative" &
+      `VZV IgG D90 (1=pos, 0=neg)` == "Negative"               ~ -0.25,
+    `VZV IgG apheresis` == "Positive" &
+      `VZV IgG D90 (1=pos, 0=neg)` == "Positive"               ~ 0.25
+  )) %>% 
+  mutate(igg_cmv_change = case_when(
+    `CMV IgG apheresis` == "Positive" &
+      `CMV IgG D90 (1=pos, 0=neg)` == "Negative"               ~ -1,
+    `CMV IgG apheresis` == "Negative" &
+      `CMV IgG D90 (1=pos, 0=neg)` == "Positive"               ~ 1,
+    `CMV IgG apheresis` == "Negative" &
+      `CMV IgG D90 (1=pos, 0=neg)` == "Negative"               ~ -0.25,
+    `CMV IgG apheresis` == "Positive" &
+      `CMV IgG D90 (1=pos, 0=neg)` == "Positive"               ~ 0.25
   ))
+  
+# Create Pneumo titers change value
+for (i in colnames(cart1 %>%
+                   select(c(starts_with("Pneumo"))))) {
 
+  pneumo_type <-
+    str_match(i, ".*(apheresis|D90)")[, 1] %>% 
+    # str_replace_all(., " ", "_") %>% 
+    str_remove(., " apheresis| D90")
+  
+  pneumo_subset <- cart1 %>% select(PT, starts_with(pneumo_type))
+  
+  pneumo_type <-
+    str_replace_all(pneumo_type, " ", "_")
+  # day <-
+  #   str_match(i, ".*(apheresis|D90)")[, 2]
+ 
+  name <- paste0(pneumo_type, "_", "change")
 
+  cart1[[paste0(pneumo_type, "_", "change")]] <-  case_when(
+    pneumo_subset[2] == "Positive" &
+      pneumo_subset[3] == "Negative"               ~ -1,
+    pneumo_subset[2] == "Negative" &
+      pneumo_subset[3] == "Positive"               ~ 1,
+    pneumo_subset[2] == "Negative" &
+      pneumo_subset[3] == "Negative"               ~ -0.25,
+    pneumo_subset[2] == "Positive" &
+      pneumo_subset[3] == "Positive"               ~ 0.25
+  )
+}
 
 # # CrCl
 # table(cart$`Baseline CrCl`)
@@ -817,10 +911,10 @@ cart1 <- cart %>%
                          #tct$day30_response_revised== "PD" ~ "PD",
                          #tct$day30_response_revised== "MR" ~ "MR",
 #                         tct$day30_response_revised== "PR" ~ "PR",
-                         #tct$day30_response_revised== "PR" & tct$MRD_status== "Positive" ~ "PR and MRD-positive",
+                         #tct$day30_response_revised== "PR" & tct$MRD_status== "Positive" ~ "PR and MRD-Positive",
                          #tct$day30_response_revised== "PR" & is.na(tct$MRD_status) ~ "PR and MRD unknown",
-#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Negative" ~ "sCR and MRD-negative",
-#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Positive" ~ "sCR and MRD-positive")
+#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Negative" ~ "sCR and MRD-Negative",
+#                         tct$day30_response_revised== "sCR" & tct$MRD_status== "Positive" ~ "sCR and MRD-Positive")
 #table(tct$ORR_MRD)
 ```
 
@@ -1543,7 +1637,7 @@ cart1 %>%
  
 
 ## Figure 2. Inflammatory markers after ide-cel
-```{r}
+```{r, fig.height=12}
 LDH <- cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
   select(`LDH at Pre-Leukapheresis`, `LDH day -5`, `LDH day 0`, 
@@ -1558,12 +1652,13 @@ LDH_long$day[LDH_long$day=="LDH day +21"] <- "Day 21"
 LDH_long$day[LDH_long$day=="LDH day +30"] <- "Day 30"
 LDH_long$day <- factor(LDH_long$day, levels = c("Pre", "Day -5", "Day 0", 
                                                 "Day 7", "Day 14", "Day 21", "Day 30"))
-ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
-  geom_boxplot() + xlab("Days") + ylab("LDH") + 
-  theme_classic() + ggtitle("LDH") + 
-  expand_limits(y = c(0, 7000)) + 
-  scale_y_break(c(1188, 4000), 
-                ticklabels=c(4000, 7000), scales=0.10) 
+# ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
+#   geom_boxplot() + xlab("Days") + ylab("LDH") + 
+#   geom_jitter(color= "grey")+
+#   theme_classic() + ggtitle("LDH") + 
+#   expand_limits(y = c(0, 7000)) + 
+#   scale_y_break(c(1188, 4000), 
+#                 ticklabels=c(4000, 7000), scales=0.10) 
 
 # cart1$`Ferritin day +7`[cart1$`Ferritin day +7`==">33511"] <- 33511
 # cart1$`Ferritin day +7` <- as.numeric(cart1$`Ferritin day +7`)
@@ -1582,12 +1677,12 @@ Ferritin_long$day[Ferritin_long$day=="Ferritin day +21"] <- "Day 21"
 Ferritin_long$day[Ferritin_long$day=="Ferritin day +30"] <- "Day 30"
 Ferritin_long$day <- factor(Ferritin_long$day, levels = c("Pre", "Day -5", "Day 0",
                                                           "Day 7", "Day 14", "Day 21", "Day 30"))
-ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
-  geom_boxplot() + 
-  xlab("Days") + ylab("Ferritin") + 
-  theme_classic() + ggtitle("Ferritin") + 
-  expand_limits(y = c(0, 34000)) +
-  scale_y_break(c(13600, 33000), ticklabels=c(33000, 34000), scales=0.10)
+# ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
+#   geom_boxplot() + 
+#   xlab("Days") + ylab("Ferritin") + 
+#   theme_classic() + ggtitle("Ferritin") + 
+#   expand_limits(y = c(0, 34000)) +
+#   scale_y_break(c(13600, 33000), ticklabels=c(33000, 34000), scales=0.10)
 
 # cart1$`CRP Pre-Leukapheresis`[cart1$`CRP Pre-Leukapheresis`=="<0.03"] <- 0.07
 # cart1$`CRP Pre-Leukapheresis` <- as.numeric(cart1$`CRP Pre-Leukapheresis`)
@@ -1610,14 +1705,14 @@ CRP_long$day[CRP_long$day=="CRP day +14"] <- "Day 14"
 CRP_long$day[CRP_long$day=="CRP day +21"] <- "Day 21"
 CRP_long$day[CRP_long$day=="CRP day +30"] <- "Day 30"
 CRP_long$day <- factor(CRP_long$day, levels = c("Pre", "Day -5", "Day 0", "Day 7", "Day 14", "Day 21", "Day 30"))
-ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-  geom_boxplot() + 
-  xlab("Days") + ylab("CRP") + 
-  theme_classic() + ggtitle("CRP") + 
-  expand_limits(y = c(0, 20)) +
-  scale_y_break(c(4.55, 7.5, 9.5, 18.0), ticklabels=c(8,9,18, 20), 
-                scales=c(0.10)
-                )
+# ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
+#   geom_boxplot() + 
+#   xlab("Days") + ylab("CRP") + 
+#   theme_classic() + ggtitle("CRP") + 
+#   expand_limits(y = c(0, 20)) +
+#   scale_y_break(c(4.55, 7.5, 9.5, 18.0), ticklabels=c(8,9,18, 20), 
+#                 scales=c(0.10)
+#                 )
 
 # ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
 #   geom_violin() + 
@@ -1649,10 +1744,11 @@ ggplot(CRP_long, aes(x=day, y=CRP_value)) +
 
 
 
+#   geom_jitter(color= "grey")+
 
 
 
-ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
+a <- ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
   geom_boxplot() + 
   xlab("Days") + ylab("LDH represented with a log2 scale") + 
   theme_classic() + ggtitle("LDH") + 
@@ -1663,20 +1759,57 @@ ggplot(LDH_long, aes(x=day, y=LDH_value)) +
   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
   )
 
-ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
+b <- ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
   geom_boxplot() + 
   xlab("Days") + ylab("Ferritin represented with a log2 scale") + 
   theme_classic() + ggtitle("Ferritin") + 
   scale_y_continuous(trans = "log2") +
   stat_compare_means(label.x = 5)
 
-ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
+c <- ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
   geom_boxplot() + 
   xlab("Days") + ylab("CRP represented with a log2 scale") + 
   theme_classic() + ggtitle("CRP") + 
   scale_y_continuous(trans = "log2") +
   stat_compare_means(label.x = 5)
 
+(a) /
+(b) /
+(c)+
+plot_annotation(tag_levels = "A")
+
+a <- ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
+  geom_boxplot() + 
+  geom_jitter(color= "grey")+
+  xlab("Days") + ylab("LDH represented with a log2 scale") + 
+  theme_classic() + ggtitle("LDH") + 
+  scale_y_continuous(trans = "log2") +
+  stat_compare_means(label.x = 5 
+                     # aes(label = paste0("p = ", ..p.format..))
+  #                  aes(
+  # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
+  )
+
+b <- ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
+  geom_boxplot() + 
+  geom_jitter(color= "grey")+
+  xlab("Days") + ylab("Ferritin represented with a log2 scale") + 
+  theme_classic() + ggtitle("Ferritin") + 
+  scale_y_continuous(trans = "log2") +
+  stat_compare_means(label.x = 5)
+
+c <- ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
+  geom_boxplot() + 
+  geom_jitter(color= "grey")+
+  xlab("Days") + ylab("CRP represented with a log2 scale") + 
+  theme_classic() + ggtitle("CRP") + 
+  scale_y_continuous(trans = "log2") +
+  stat_compare_means(label.x = 5)
+
+(a) /
+(b) /
+(c) +
+plot_annotation(tag_levels = "A")
 ```
 
 ## Figure 3. Cellular and humoral immune reconstitution after ide-cel
@@ -1880,30 +2013,67 @@ IgG_fig <- IgG_fig %>%
 As discussed at meeting, rather than showing count recovery over time plan to show Grade 3+ cytopenias (Hb, Plt, ANC, WBC) over time (Day –5, Day +30, Day +60, Day +90)
 **We want grade 3 only right?**
 ```{r}
-cart2 %>% 
-  select(PT,
-         `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
-         `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
-         `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
-         `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
-  ) %>% 
-  pivot_longer(cols = `gr3_Leukopenia_-5d`: gr3_Thrombocytopenia_90d) %>% 
-  group_by(name, value) %>% 
-  filter(!is.na(value)) %>% 
-  summarise(count=n()) %>% 
-  mutate(perc=(count/sum(count)*100)
-  ) %>% 
-  separate("name", into = c("gr3", "name", "day"), sep = "_") %>% 
-  filter(value == "YES") %>% 
-  # unite(time, c("day":"me"), sep = " ") %>% 
-  ggplot(aes(x= day, y= perc, fill= name))+
-  geom_bar(stat = "identity",
-           position=position_dodge(width=0.9))+
-  scale_fill_viridis_d() +
-  labs(fill = NULL, y = "%", title = "Grade 3+")+
-  theme_classic()
+# cart2 %>% 
+#   select(PT,
+#          `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
+#          `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
+#          `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
+#          `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
+#   ) %>% 
+#   pivot_longer(cols = `gr3_Leukopenia_-5d`: gr3_Thrombocytopenia_90d) %>% 
+#   group_by(name, value) %>% 
+#   filter(!is.na(value)) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+#   separate("name", into = c("gr3", "name", "day"), sep = "_") %>% 
+#   filter(value == "YES") %>% 
+#   # unite(time, c("day":"me"), sep = " ") %>% 
+#   ggplot(aes(x= day, y= perc, fill= name))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   scale_fill_viridis_d() +
+#   labs(fill = NULL, y = "%", title = "Grade 3+")+
+#   theme_classic()
+# 
+# cart2 %>% 
+#   select(PT,
+#          `Leukopenia_-5d`, Leukopenia_30d, Leukopenia_60d, Leukopenia_90d,
+#          `Neutropenia_-5d`, Neutropenia_30d, Neutropenia_60d, Neutropenia_90d,
+#          `Anemia_-5d`, Anemia_30d, Anemia_60d, Anemia_90d,
+#          `Thrombocytopenia_-5d`, Thrombocytopenia_30d, Thrombocytopenia_60d, Thrombocytopenia_90d,
+#          
+#          `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
+#          `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
+#          `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
+#          `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
+#   ) %>% 
+#   pivot_longer(cols = `Leukopenia_-5d`: gr3_Thrombocytopenia_90d) %>% 
+#   mutate(grade = str_match(name, "(gr3_)(.*)")[,2],
+#          grade = case_when(
+#            grade == "gr3_"       ~ "Grade 3+",
+#            TRUE                  ~ "Any grade"
+#          )) %>% 
+#   mutate(name1 = str_match(name, "(gr3_)(.*)")[,3],
+#          name2 = coalesce(name1, name)) %>% 
+#   group_by(name2, value, grade) %>% 
+#   filter(!is.na(value)) %>% 
+#   summarise(count=n()) %>%
+#   group_by(name2, grade) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>%
+#   separate("name2", into = c("name", "day"), sep = "_") %>% 
+#   filter(value == "YES") %>% 
+#   # unite(time, c("day":"me"), sep = " ") %>% 
+#   ggplot(aes(x= day, y= perc, fill= name, alpha= grade))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   scale_fill_viridis_d() + 
+#   scale_alpha_ordinal(range = c(0.5, 1))+
+#   labs(fill = NULL, y = "%")+
+#   theme_classic()
 
-cart2 %>% 
+a <- cart2 %>% 
   select(PT,
          `Leukopenia_-5d`, Leukopenia_30d, Leukopenia_60d, Leukopenia_90d,
          `Neutropenia_-5d`, Neutropenia_30d, Neutropenia_60d, Neutropenia_90d,
@@ -1924,57 +2094,32 @@ cart2 %>%
   mutate(name1 = str_match(name, "(gr3_)(.*)")[,3],
          name2 = coalesce(name1, name)) %>% 
   group_by(name2, value, grade) %>% 
-  filter(!is.na(value)) %>% 
-  summarise(count=n()) %>% 
+  filter(!is.na(value)) %>%
+  summarise(count=n()) %>%
+  group_by(name2, grade) %>% 
   mutate(perc=(count/sum(count)*100)
-  ) %>% 
+  ) %>%
   separate("name2", into = c("name", "day"), sep = "_") %>% 
-  filter(value == "YES") %>% 
+  ungroup() %>% 
+  filter(value == "YES")
+b <- a %>% filter(grade == "Any grade")
+a %>% filter(grade == "Grade 3+") %>% 
   # unite(time, c("day":"me"), sep = " ") %>% 
-  ggplot(aes(x= day, y= perc, fill= name, alpha= grade))+
+  ggplot(aes(x= day, 
+             y= perc, 
+             fill= name, alpha= 1
+             ))+
   geom_bar(stat = "identity",
            position=position_dodge(width=0.9))+
+  geom_bar(stat = "identity",
+           position=position_dodge(width=0.9), data= b,
+           aes(x= day, y= perc, fill= name), alpha= 0.4)+
+  # facet_grid(name ~ .,)+
   scale_fill_viridis_d() + 
-  scale_alpha_ordinal(range = c(0.5, 1))+
-  labs(fill = NULL, y = "%")+
-  theme_classic()
-
-cart2 %>% 
-  select(PT,
-         `Leukopenia_-5d`, Leukopenia_30d, Leukopenia_60d, Leukopenia_90d,
-         `Neutropenia_-5d`, Neutropenia_30d, Neutropenia_60d, Neutropenia_90d,
-         `Anemia_-5d`, Anemia_30d, Anemia_60d, Anemia_90d,
-         `Thrombocytopenia_-5d`, Thrombocytopenia_30d, Thrombocytopenia_60d, Thrombocytopenia_90d,
-         
-         `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
-         `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
-         `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
-         `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
-  ) %>% 
-  pivot_longer(cols = `Leukopenia_-5d`: gr3_Thrombocytopenia_90d) %>% 
-  mutate(grade = str_match(name, "(gr3_)(.*)")[,2],
-         grade = case_when(
-           grade == "gr3_"       ~ "Grade 3+",
-           TRUE                  ~ "Any grade"
-         )) %>% 
-  mutate(name1 = str_match(name, "(gr3_)(.*)")[,3],
-         name2 = coalesce(name1, name)) %>% 
-  group_by(name2, value, grade) %>% 
-  filter(!is.na(value)) %>% 
-  summarise(count=n()) %>% 
-  mutate(perc=(count/sum(count)*100)
-  ) %>% 
-  separate("name2", into = c("name", "day"), sep = "_") %>% 
-  filter(value == "YES") %>% 
-  # unite(time, c("day":"me"), sep = " ") %>% 
-  ggplot(aes(x= name, y= perc, fill= name, alpha= grade))+
-  geom_bar(stat = "identity", position = "stack")+
-  facet_grid(day ~ .,)+
-  scale_fill_viridis_d() + 
-  scale_alpha_ordinal(range = c(0.4, 1))+
-  labs(fill = NULL, x= NULL, y = "%")+
+  labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
   theme_classic()+
-  coord_flip()
+  scale_alpha_continuous(limits = c(0.4,1), breaks = c(0.4,1),
+                         labels= c("Any Grade", "Grade 3+"))
 ```
  
 
@@ -2005,74 +2150,58 @@ Lauren
 
 ## Figure S1. Viral titers after ide-cel
 
-A)	HSV 1/2 IgG
+### A)	HSV 1/2 IgG
 
 Example from prior cytopenia paper below. We can show this data however you think best
 Interpretation: ≤0.89=negative (not immune)
                         0.90-1.09=indeterminate (can consider negative for purposes of analysis)
                         ≥1.10=positive (immune)
+                        
+```{r, echo=TRUE}
+# mutate(`IgG HSV1/2 apheresis` = case_when(
+#     `IgG HSV1/2 apheresis` < 0.9         ~ "Negative",
+#     `IgG HSV1/2 apheresis` >= 0.9 &
+#       `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
+#     `IgG HSV1/2 apheresis` >= 1.10       ~ "Positive",
+#   ))
+```
+
 ```{r}
-cart2 %>% 
-  select(PT, 
-         `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`
- 
-  ) %>% 
-  pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(time, c("na":"me"), sep = " ") %>% 
-  # mutate(value = as.numeric(value)) %>% 
-  mutate(day = case_when(
-    day == "D90"        ~ 90,
-    day == "apheresis"  ~ 0
-  )) %>% 
-  ggplot(aes(x= day, y= value, color= PT))+
-  geom_point()+
-  geom_line()+
-  scale_x_continuous(
-    breaks = c(0, 90),
-    labels = c("Apheresis", "D90"))+
-  scale_color_viridis_d() +
-  labs(fill = "Patients", x = NULL)+
-  theme_classic()
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>% 
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(time, c("na":"me"), sep = " ") %>% 
+#   # mutate(value = as.numeric(value)) %>% 
+#   mutate(day = case_when(
+#     day == "D90"        ~ 90,
+#     day == "apheresis"  ~ 0
+#   )) %>% 
+#   ggplot(aes(x= day, y= value, color= PT))+
+#   geom_point()+
+#   geom_line()+
+#   scale_x_continuous(
+#     breaks = c(0, 90),
+#     labels = c("Apheresis", "D90"))+
+#   scale_color_viridis_d() +
+#   labs(fill = "Patients", x = NULL)+
+#   theme_classic()
 
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+#   
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   ggplot(aes(x= day,  fill= value))+
+#   geom_bar()
 
-
-cart2 %>% 
-  select(PT, 
-         `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
-  mutate(`IgG HSV1/2 apheresis` = case_when(
-    `IgG HSV1/2 apheresis` < 0.9         ~ "negative",
-    `IgG HSV1/2 apheresis` >= 0.9 &
-      `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 apheresis` >= 1.10       ~ "positive",
-  )) %>%
-  mutate(`IgG HSV1/2 D90` = case_when(
-    `IgG HSV1/2 D90` < 0.9         ~ "negative",
-    `IgG HSV1/2 D90` >= 0.9 &
-      `IgG HSV1/2 D90` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 D90` >= 1.10       ~ "positive",
-  )) %>% 
-  pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(name, c("na":"me"), sep = " ") %>% 
-  ggplot(aes(x= day,  fill= value))+
-  geom_bar()
-
+# Histogram
 cart2 %>% 
   select(PT, 
          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
-  mutate(`IgG HSV1/2 apheresis` = case_when(
-    `IgG HSV1/2 apheresis` < 0.9         ~ "negative",
-    `IgG HSV1/2 apheresis` >= 0.9 &
-      `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 apheresis` >= 1.10       ~ "positive",
-  )) %>%
-  mutate(`IgG HSV1/2 D90` = case_when(
-    `IgG HSV1/2 D90` < 0.9         ~ "negative",
-    `IgG HSV1/2 D90` >= 0.9 &
-      `IgG HSV1/2 D90` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 D90` >= 1.10       ~ "positive",
-  )) %>% 
   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
   unite(name, c("na":"me"), sep = " ") %>% 
@@ -2082,51 +2211,108 @@ cart2 %>%
   mutate(perc=(count/sum(count)*100)
   ) %>% 
   ggplot(aes(x= day, y= perc, fill= value))+
-  geom_bar(stat = "identity")
+  geom_bar(stat = "identity")+
+  labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+       fill= "Immunity")+
+  scale_y_continuous(expand = c(0, 0))+
+  theme_classic()
 
+library(ggpattern)
 cart2 %>% 
   select(PT, 
          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
-  mutate(`IgG HSV1/2 apheresis` = case_when(
-    `IgG HSV1/2 apheresis` < 0.9         ~ "negative",
-    `IgG HSV1/2 apheresis` >= 0.9 &
-      `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 apheresis` >= 1.10       ~ "positive",
-  )) %>%
-  mutate(`IgG HSV1/2 D90` = case_when(
-    `IgG HSV1/2 D90` < 0.9         ~ "negative",
-    `IgG HSV1/2 D90` >= 0.9 &
-      `IgG HSV1/2 D90` < 1.10      ~ "indeterminate",
-    `IgG HSV1/2 D90` >= 1.10       ~ "positive",
-  )) %>% 
   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
   unite(name, c("na":"me"), sep = " ") %>% 
   filter(!is.na(value)) %>% 
   group_by(name, day, value) %>% 
   summarise(count=n()) %>% 
+  mutate(perc=(count/sum(count)*100)
+  ) %>% 
+  ggplot(aes(x= day, y= perc))+
+  geom_bar_pattern(aes(pattern = value),
+                   stat = "identity",
+    fill            = 'white', 
+    colour          = 'black')+
+  # geom_bar(stat = "identity")+
+  labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+       fill= "Immunity")+
+  scale_y_continuous(expand = c(0, 0))+
+  theme_classic()
 
-  ggplot(aes(x= day, y= count, fill= value))+
-  geom_bar(stat = "identity",
-           position=position_dodge(width=0.9))
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+# 
+#   ggplot(aes(x= day, y= count, fill= value))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))
+```
 
 
+```{r, fig.width=5, fig.height=6}
+# # Tile
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(time, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   arrange(value) %>% 
+#   ggplot(aes(x= day, y= fct_reorder2(PT, value, day), fill= value))+
+#   geom_tile(color = "white")+
+#   labs(fill = NULL, x = NULL, y= NULL)+
+#   theme_classic()
+```
+
+
+```{r}
+# Alluvial
+library(ggalluvial)
+
+alluvial_A <- cart2 %>% 
+  select(PT, igg_hsv_change,
+         `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+  # mutate(igg_hsv_change = case_when(
+  #   igg_hsv_change == 1        ~  "Acquired immunity",
+  #   igg_hsv_change == 0.25        ~  "Positive overtime",
+  #   igg_hsv_change == -0.25        ~  "Negative overtime",
+  #   igg_hsv_change == -1        ~  "Lost immunity"
+  # )) %>% 
+  drop_na() %>% 
+  group_by(`IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>% 
+  summarise(count=n()) %>% 
   
+  ggplot(aes(axis1 = `IgG HSV1/2 apheresis`, axis2 = `IgG HSV1/2 D90`,
+             y = count)) +
+  geom_alluvium(aes(fill = `IgG HSV1/2 apheresis`)
+  )+
+  geom_stratum()+
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_classic()+
+  ggtitle("Evolution of virus titers")
 ```
 
 
  
 
-B)	VZV IgG (positive=immune vs negative or equivocal=not immune)
-```{r, fig.width=5, fig.height=6}
+### B)	VZV IgG (positive=immune vs negative or equivocal=not immune)
+```{r}
 # cart2 %>% 
 #   mutate(`VZV IgG apheresis` = case_when(
-#     `VZV IgG apheresis` == "0"         ~ "negative",
+#     `VZV IgG apheresis` == "0"         ~ "Negative",
 #     `VZV IgG apheresis` == "1"         ~ "immune",
 #     TRUE                          ~ `VZV IgG apheresis`
 #   )) %>% 
 #   mutate(`VZV IgG D90 (1=pos, 0=neg)` = case_when(
-#     `VZV IgG D90 (1=pos, 0=neg)` == "0"         ~ "negative",
+#     `VZV IgG D90 (1=pos, 0=neg)` == "0"         ~ "Negative",
 #     `VZV IgG D90 (1=pos, 0=neg)` == "1"         ~ "immune",
 #     TRUE                          ~ `VZV IgG D90 (1=pos, 0=neg)`
 #   )) %>% 
@@ -2150,89 +2336,162 @@ B)	VZV IgG (positive=immune vs negative or equivocal=not immune)
 #   labs(fill = "Patients", x = NULL)+
 #   theme_classic()
 
-cart2 %>% 
-  mutate(`VZV IgG apheresis` = case_when(
-    `VZV IgG apheresis` == "0"         ~ "negative",
-    `VZV IgG apheresis` == "1"         ~ "immune",
-    TRUE                          ~ `VZV IgG apheresis`
-  )) %>% 
-  mutate(`VZV IgG D90 (1=pos, 0=neg)` = case_when(
-    `VZV IgG D90 (1=pos, 0=neg)` == "0"         ~ "negative",
-    `VZV IgG D90 (1=pos, 0=neg)` == "1"         ~ "immune",
-    TRUE                          ~ `VZV IgG D90 (1=pos, 0=neg)`
-  )) %>% 
-  select(PT, 
-         `VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`
-  ) %>% 
-  pivot_longer(cols = `VZV IgG apheresis`: `VZV IgG D90 (1=pos, 0=neg)`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(time, c("na":"me"), sep = " ") %>% 
-  filter(!is.na(value)) %>% 
-  arrange(value) %>% 
-  ggplot(aes(x= day, y= fct_reorder2(PT, value, day), fill= value))+
-  geom_tile(color = "white")+
-  labs(fill = NULL, x = NULL, y= NULL)+
-  theme_classic()
+# Histogram
+# cart2 %>% 
+#   select(PT, 
+#          `VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`
+#   ) %>% 
+#   pivot_longer(cols = `VZV IgG apheresis`: `VZV IgG D90 (1=pos, 0=neg)`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+#   ggplot(aes(x= day, y= perc, fill= value))+
+#   geom_bar(stat = "identity")+
+#   labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+#        fill= "Immunity")+
+#   scale_y_continuous(expand = c(0, 0))+
+#   theme_classic()
+
+# cart2 %>% 
+#   select(PT, 
+#          `VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`
+#   ) %>% 
+#   pivot_longer(cols = `VZV IgG apheresis`: `VZV IgG D90 (1=pos, 0=neg)`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+# 
+#   ggplot(aes(x= day, y= count, fill= value))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))
+```
+
+
+```{r, fig.width=5, fig.height=6}
+# Tile
+# cart2 %>% 
+#   select(PT, 
+#          `VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`
+#   ) %>% 
+#   pivot_longer(cols = `VZV IgG apheresis`: `VZV IgG D90 (1=pos, 0=neg)`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(time, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   arrange(value) %>% 
+#   ggplot(aes(x= day, y= fct_reorder2(PT, value, day), fill= value))+
+#   geom_tile(color = "white")+
+#   labs(fill = NULL, x = NULL, y= NULL)+
+#   theme_classic()
 ```
 
 
 ```{r}
-cart2 %>% 
-  mutate(`VZV IgG apheresis` = case_when(
-    `VZV IgG apheresis` == "0"         ~ "negative",
-    `VZV IgG apheresis` == "1"         ~ "immune",
-    TRUE                          ~ `VZV IgG apheresis`
-  )) %>% 
-  mutate(`VZV IgG D90 (1=pos, 0=neg)` = case_when(
-    `VZV IgG D90 (1=pos, 0=neg)` == "0"         ~ "negative",
-    `VZV IgG D90 (1=pos, 0=neg)` == "1"         ~ "immune",
-    TRUE                          ~ `VZV IgG D90 (1=pos, 0=neg)`
-  )) %>% 
-  select(PT, 
+# Alluvial
+alluvial_B <- cart2 %>% 
+  select(PT, igg_vzv_change,
          `VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`
   ) %>% 
-  pivot_longer(cols = `VZV IgG apheresis`: `VZV IgG D90 (1=pos, 0=neg)`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(name, c("na":"me"), sep = " ") %>% 
-  filter(!is.na(value)) %>% 
-  group_by(name, day, value) %>% 
+  # mutate(igg_vzv_change = case_when(
+  #   igg_vzv_change == 1        ~  "Acquired immunity",
+  #   igg_vzv_change == 0.25        ~  "Positive overtime",
+  #   igg_vzv_change == -0.25        ~  "Negative overtime",
+  #   igg_vzv_change == -1        ~  "Lost immunity"
+  # )) %>% 
+  drop_na() %>% 
+  group_by(`VZV IgG apheresis`, `VZV IgG D90 (1=pos, 0=neg)`) %>% 
   summarise(count=n()) %>% 
-
-  ggplot(aes(x= day, y= count, fill= value))+
-  geom_bar(stat = "identity",
-           position=position_dodge(width=0.9))
+  
+  ggplot(aes(axis1 = `VZV IgG apheresis`, axis2= `VZV IgG D90 (1=pos, 0=neg)`,
+             y = count)) +
+  geom_alluvium(aes(fill = `VZV IgG apheresis`)
+  )+
+  geom_stratum()+
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_classic()+
+  ggtitle("Evolution of virus titers")
 ```
 
-C)	CMV IgG (positive=immune vs negative=not immune)
+### C)	CMV IgG (positive=immune vs negative=not immune)
 ```{r}
-cart2 %>% 
-  mutate(`CMV IgG apheresis` = case_when(
-    `CMV IgG apheresis` == "0"         ~ "negative",
-    `CMV IgG apheresis` == "1"         ~ "immune"
-  )) %>% 
-  mutate(`CMV IgG D90 (1=pos, 0=neg)` = case_when(
-    `CMV IgG D90 (1=pos, 0=neg)` == "0"         ~ "negative",
-    `CMV IgG D90 (1=pos, 0=neg)` == "1"         ~ "immune"
-  )) %>% 
-  select(PT, 
+# Histogram
+# cart2 %>% 
+#   
+#   select(PT, 
+#          `CMV IgG apheresis`, `CMV IgG D90 (1=pos, 0=neg)`
+#   ) %>% 
+#   pivot_longer(cols = `CMV IgG apheresis` : `CMV IgG D90 (1=pos, 0=neg)`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+#   ggplot(aes(x= day, y= perc, fill= value))+
+#   geom_bar(stat = "identity")+
+#   labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+#        fill= "Immunity")+
+#   scale_y_continuous(expand = c(0, 0))+
+#   theme_classic()
+```
+
+
+```{r, fig.width=5, fig.height=6}
+# Tile
+# cart2 %>% 
+#   
+#   select(PT, 
+#          `CMV IgG apheresis`, `CMV IgG D90 (1=pos, 0=neg)`
+#   ) %>% 
+#   pivot_longer(cols = `CMV IgG apheresis` : `CMV IgG D90 (1=pos, 0=neg)`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(time, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   arrange(value) %>% 
+#   ggplot(aes(x= day, y= fct_reorder2(PT, value, day), fill= value))+
+#   geom_tile(color = "white")+
+#   labs(fill = NULL, x = NULL, y= NULL)+
+#   theme_classic()
+```
+
+
+```{r}
+# Alluvial
+alluvial_C <- cart2 %>% 
+  select(PT, igg_cmv_change,
          `CMV IgG apheresis`, `CMV IgG D90 (1=pos, 0=neg)`
   ) %>% 
-  pivot_longer(cols = `CMV IgG apheresis` : `CMV IgG D90 (1=pos, 0=neg)`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(time, c("na":"me"), sep = " ") %>% 
-  # mutate(value = as.numeric(value)) %>% 
-  mutate(day = case_when(
-    day == "D90"        ~ 90,
-    day == "apheresis"  ~ 0
-  )) %>% 
-  ggplot(aes(x= day, y= value, color= PT))+
-  geom_point(position=position_dodge(width=0.9))+
-  scale_x_continuous(
-    breaks = c(0, 90),
-    labels = c("Apheresis", "D90"))+
-  scale_color_viridis_d() +
-  labs(fill = "Patients", x = NULL)+
-  theme_classic()
+  # mutate(igg_cmv_change = case_when(
+  #   igg_cmv_change == 1        ~  "Acquired immunity",
+  #   igg_cmv_change == 0.25        ~  "Positive overtime",
+  #   igg_cmv_change == -0.25        ~  "Negative overtime",
+  #   igg_cmv_change == -1        ~  "Lost immunity"
+  # )) %>% 
+  drop_na() %>% 
+  group_by(`CMV IgG apheresis`, `CMV IgG D90 (1=pos, 0=neg)`) %>% 
+  summarise(count=n()) %>% 
+  
+  ggplot(aes(axis1 = `CMV IgG apheresis`, axis2= `CMV IgG D90 (1=pos, 0=neg)`,
+             y = count)) +
+  geom_alluvium(aes(fill = `CMV IgG apheresis`)
+  )+
+  geom_stratum()+
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_classic()+
+  ggtitle("Evolution of virus titers")
+```
+
+```{r, fig.height=12}
+(alluvial_A) /
+  (alluvial_B) /
+  (alluvial_C) +
+  plot_annotation(tag_levels = "A")
 ```
 
 ## Figure S2. Pneumococcal titers after ide-cel
@@ -2240,33 +2499,102 @@ cart2 %>%
 Antibody concentration >1.0 is considered long-term protection (immune)
 If antibody concentration ≤1.0 consider negative (not immune)
 ```{r, fig.width=12, fig.height=12}
-cart2 %>% 
-  select(PT, 
-         starts_with("Pneumo")
- 
-  ) %>% 
-  pivot_longer(cols = -PT) %>% 
-  filter(!is.na(value)) %>% 
-  mutate(day = str_match(name, ".*(apheresis|D90)")[,2]) %>% 
-  mutate(name = str_remove(name, " apheresis| D90")) %>% 
-  
-  mutate(value = case_when(
-    value <= 1           ~ "negative",
-    value > 1            ~ "immune"
-  )) %>% 
-  group_by(name, day, value) %>% 
-  summarise(count=n()) %>% 
-  mutate(perc=(count/sum(count)*100)
-  ) %>% 
-
-  ggplot(aes(x= day, y= perc, fill= value))+
-  geom_bar(stat = "identity",
-           position=position_dodge2(width=0.9, preserve = "single"))+
-  facet_wrap(.~ name)
-
-
+# Histogram
+# cart2 %>% 
+#   select(PT, 
+#          starts_with("Pneumo"), -ends_with("change")) %>% 
+#   pivot_longer(cols = -PT) %>% 
+#   filter(!is.na(value)) %>% 
+#   mutate(day = str_match(name, ".*(apheresis|D90)")[,2]) %>% 
+#   mutate(name = str_remove(name, " apheresis| D90")) %>% 
+#   
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+# 
+#   ggplot(aes(x= day, y= perc, fill= value))+
+#   # geom_bar(stat = "identity",
+#   #          position=position_dodge2(width=0.9, preserve = "single"))+
+#   geom_bar(stat = "identity")+
+#   labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+#        fill= "Immunity")+
+#   scale_y_continuous(expand = c(0, 0))+
+#   theme_classic()+
+#   facet_wrap(.~ name)
 ```
 
+
+```{r, fig.width=12, fig.height=14}
+# Tile
+# cart2 %>% 
+#   select(PT, 
+#          starts_with("Pneumo"), -ends_with("change")) %>% 
+#   pivot_longer(cols = -PT) %>% 
+#   mutate(day = str_match(name, ".*(apheresis|D90)")[,2]) %>% 
+#   mutate(name = str_remove(name, " apheresis| D90")) %>% 
+#   
+#   
+#   filter(!is.na(value)) %>% 
+#   arrange(value) %>% 
+#   ggplot(aes(x= day, y= fct_reorder2(PT, value, day), fill= value))+
+#   geom_tile(color = "white")+
+#   labs(fill = NULL, x = NULL, y= NULL)+
+#   theme_classic()+
+#   facet_wrap(.~ name)
+```
+
+##########################
+
+```{r, fig.width=15, fig.height=12}
+library(ComplexHeatmap)
+mat <- cart2 %>% 
+  select(PT, intersect(starts_with("Pneumo"), ends_with("change"))) %>% 
+  drop_na() %>% 
+  # mutate(new_sort = rowSums(select(.,-PT), na.rm = TRUE)) %>%
+  mutate(new_sort = 
+           c(5,7,8,23,6,9,10,11,12,4,13,14,26,15,
+             24,3,16,25,17,2,18,21,19,20,1,22)) %>%
+  
+  arrange(new_sort) %>% 
+    select(-new_sort)
+
+df5 <- t((as.matrix(mat)))
+
+df <- df5 %>% `colnames<-`(c(.[1,])) %>% 
+  .[-1,]
+
+df <- df %>% 
+sub(pattern = " 1.00", replacement = "Acquired immunity") %>% 
+sub(pattern = " 0.25", replacement = "Positive overtime") %>% 
+sub(pattern = "-0.25", replacement = "Negative overtime") %>% 
+sub(pattern = "-1.00", replacement = "Lost immunity")
+
+
+colors = structure(c("blue", "darkgrey", "lightgrey", "red"), 
+                   names = c("Lost immunity", "Negative overtime", "Positive overtime", "Acquired immunity"))
+
+
+ht_list <- Heatmap(df, name = "change", 
+        rect_gp = gpar(col = "white", lwd = 0.1),
+        column_title = "Change in titers",
+        show_column_names =FALSE,
+        row_names_side = "left",
+        row_names_gp = gpar(fontsize = 11),
+        col = colors)
+draw(ht_list, heatmap_legend_side = "bottom")
+# Heatmap(df, name = "change", 
+#         rect_gp = gpar(col = "white", lwd = 0.1),
+#         column_title = "Change in titers",
+#         column_names_rot = 45,
+#         column_names_gp = gpar(fontsize = 8),
+#         row_names_side = "left", 
+#         row_names_gp = gpar(fontsize = 10,
+#                             col = c("darkgreen", "pink", "orange", rep("blue", 28))),
+#         show_heatmap_legend = TRUE,
+#         col = colors)
+kjhkhkh
+```
 
 
 
