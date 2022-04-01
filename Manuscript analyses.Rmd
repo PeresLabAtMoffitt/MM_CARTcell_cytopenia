@@ -2104,7 +2104,6 @@ a <- cart2 %>%
   filter(value == "YES")
 b <- a %>% filter(grade == "Any grade")
 a %>% filter(grade == "Grade 3+") %>% 
-  # unite(time, c("day":"me"), sep = " ") %>% 
   ggplot(aes(x= day, 
              y= perc, 
              fill= name, alpha= 1
@@ -2114,8 +2113,7 @@ a %>% filter(grade == "Grade 3+") %>%
   geom_bar(stat = "identity",
            position=position_dodge(width=0.9), data= b,
            aes(x= day, y= perc, fill= name), alpha= 0.4)+
-  # facet_grid(name ~ .,)+
-  scale_fill_viridis_d() + 
+  scale_fill_brewer(palette = "Spectral")+
   labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
   theme_classic()+
   scale_alpha_continuous(limits = c(0.4,1), breaks = c(0.4,1),
