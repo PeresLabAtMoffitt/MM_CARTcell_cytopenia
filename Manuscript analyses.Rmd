@@ -2075,17 +2075,25 @@ As discussed at meeting, rather than showing count recovery over time plan to sh
 
 a <- cart2 %>% 
   select(PT,
+         Leukopenia_apheresis,
          `Leukopenia_-5d`, Leukopenia_30d, Leukopenia_60d, Leukopenia_90d,
+         Neutropenia_apheresis,
          `Neutropenia_-5d`, Neutropenia_30d, Neutropenia_60d, Neutropenia_90d,
+         Anemia_apheresis,
          `Anemia_-5d`, Anemia_30d, Anemia_60d, Anemia_90d,
+         Thrombocytopenia_apheresis,
          `Thrombocytopenia_-5d`, Thrombocytopenia_30d, Thrombocytopenia_60d, Thrombocytopenia_90d,
          
+         gr3_Leukopenia_apheresis,
          `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
+         gr3_Neutropenia_apheresis,
          `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
+         gr3_Anemia_apheresis,
          `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
+         gr3_Thrombocytopenia_apheresis,
          `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
   ) %>% 
-  pivot_longer(cols = `Leukopenia_-5d`: gr3_Thrombocytopenia_90d) %>% 
+  pivot_longer(cols = `Leukopenia_apheresis`: gr3_Thrombocytopenia_90d) %>% 
   mutate(grade = str_match(name, "(gr3_)(.*)")[,2],
          grade = case_when(
            grade == "gr3_"       ~ "Grade 3+",
@@ -2101,7 +2109,9 @@ a <- cart2 %>%
   ) %>%
   separate("name2", into = c("name", "day"), sep = "_") %>% 
   ungroup() %>% 
-  filter(value == "YES")
+  filter(value == "YES") %>% 
+  add_row("name"="Leukopenia",  "day"="apheresis", "value"= "YES", "grade"="Any grade", "count"=0, "perc"=0) %>% 
+  mutate(day = factor(day, levels = c("apheresis", "-5d", "30d", "60d", "90d")))
 b <- a %>% filter(grade == "Any grade")
 a %>% filter(grade == "Grade 3+") %>% 
   ggplot(aes(x= day, 
