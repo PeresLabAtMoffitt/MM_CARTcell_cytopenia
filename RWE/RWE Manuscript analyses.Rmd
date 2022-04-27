@@ -214,6 +214,43 @@ cart0 <- MM_cart %>%
       `Pomalidomide (exposed vs. refractory)` == "Refractory" & 
       `Daratumumab (exposed vs. refractory)` == "Refractory"  ~ "YES"
   )) %>% 
+  mutate(`Tocilizumab (Yes, No)` = case_when(
+    `Tocilizumab (Yes, No)` == "Siltuximab"                    ~ "YES",
+      str_detect(`Tocilizumab (Yes, No)`, "COVID")             ~ "NO",
+    TRUE                                                       ~ `Tocilizumab (Yes, No)`
+  )) %>% 
+  mutate(`Steroid use (Yes, No)` = case_when(
+    str_detect(`Steroid use (Yes, No)`, "COVID")               ~ "NO",
+    TRUE                                                       ~ `Steroid use (Yes, No)`
+  )) %>% 
+  mutate(`Disease status at time of referral (Relapsed vs Refractory)` = case_when(
+    str_detect(`Disease status at time of referral (Relapsed vs Refractory)`, "Relapse")       ~ "Relapse",
+    str_detect(`Disease status at time of referral (Relapsed vs Refractory)`, "Response")      ~ "Response",
+    TRUE                                     ~ `Disease status at time of referral (Relapsed vs Refractory)`
+  )) %>% 
+  
+  mutate(exclusion_criteria =  
+           rowSums(select(.,`Received investigation agent, plasmapheresis, surgery, radiation, or therapy within 14 days of apheresis (Yes, No)`:`Other BCMA trial`
+                          ) == "YES", na.rm = TRUE),
+         exclusion_criteria = case_when(
+           exclusion_criteria == 0           ~ "0",
+           exclusion_criteria == 1           ~ "1",
+           exclusion_criteria > 1            ~ "≥2"
+         )) %>% 
+  mutate(comorbidities = case_when(
+    `Renal insufficiency CrCl < 45 mL/min (Yes, No)` == "YES" |
+      `H/O Class III or IV CHF or severe nonischemic cardiomyopathy, unstable or poorly controlled angina, myocardial infarction, or ventricular arrhythmia within 6 months (Yes, No)` == "YES" |
+      `LVEF <45% (Yes, No)` == "YES" |
+      `AST/ALT >2.5 ULN (Yes, No)` == "YES" |
+      `Total Bilirubin >1.5ULN (Yes, No)` == "YES" |
+      `H/O of malignancies (Yes, No)` == "YES"                    ~ "YES",
+    `LVEF <45% (Yes, No)` == "NO" &
+      `AST/ALT >2.5 ULN (Yes, No)` == "NO" &
+      `Total Bilirubin >1.5ULN (Yes, No)` == "NO" &
+      `H/O of malignancies (Yes, No)` == "NO"                     ~ "NO",
+    TRUE                                                          ~ NA_character_
+  )) %>% 
+  
 # CRS 
   mutate(CRS_any = ifelse(`Max CRS grade (0-5)` == 0, "NO", "YES"),
          CRS_any2 = ifelse(CRS_any== "NO", 0, 1),
@@ -260,97 +297,6 @@ cart0 <- MM_cart %>%
   #   TRUE                                                          ~ `Access type`
   # )) %>% 
   # mutate(best_response = ) %>% 
-  # mutate(Leukopenia_apheresis = case_when(
-  #   `WBC apheresis` < 4                                           ~ "YES",
-  #   is.na(`WBC apheresis`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_-5d` = case_when(
-  #   `WBC day -5 (k/ul)` < 4                                       ~ "YES",
-  #   is.na(`WBC day -5 (k/ul)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_0d` = case_when(
-  #   `WBC day 0 (k/uL)` < 4                                        ~ "YES",
-  #   is.na(`WBC day 0 (k/uL)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_7d` = case_when(
-  #   `WBC day +7` < 4                                              ~ "YES",
-  #   is.na(`WBC day +7`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_14d` = case_when(
-  #   `WBC day +14` < 4                                             ~ "YES",
-  #   is.na(`WBC day +14`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_21d` = case_when(
-  #   `WBC day +21` < 4                                             ~ "YES",
-  #   is.na(`WBC day +21`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_30d` = case_when(
-  #   `WBC day +30` < 4                                             ~ "YES",
-  #   is.na(`WBC day +30`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_60d` = case_when(
-  #   `WBC day +60` < 4                                             ~ "YES",
-  #   is.na(`WBC day +60`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Leukopenia_90d` = case_when(
-  #   `WBC day +90` < 4                                             ~ "YES",
-  #   is.na(`WBC day +90`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(gr3_Leukopenia_apheresis = case_when(
-  #   `WBC apheresis` < 2                                           ~ "YES",
-  #   is.na(`WBC apheresis`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_-5d` = case_when(
-  #   `WBC day -5 (k/ul)` < 2                                       ~ "YES",
-  #   is.na(`WBC day -5 (k/ul)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_0d` = case_when(
-  #   `WBC day 0 (k/uL)` < 2                                        ~ "YES",
-  #   is.na(`WBC day 0 (k/uL)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_7d` = case_when(
-  #   `WBC day +7` < 2                                              ~ "YES",
-  #   is.na(`WBC day +7`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_14d` = case_when(
-  #   `WBC day +14` < 2                                             ~ "YES",
-  #   is.na(`WBC day +14`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_21d` = case_when(
-  #   `WBC day +21` < 2                                             ~ "YES",
-  #   is.na(`WBC day +21`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_30d` = case_when(
-  #   `WBC day +30` < 2                                             ~ "YES",
-  #   is.na(`WBC day +30`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_60d` = case_when(
-  #   `WBC day +60` < 2                                             ~ "YES",
-  #   is.na(`WBC day +60`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`gr3_Leukopenia_90d` = case_when(
-  #   `WBC day +90` < 2                                             ~ "YES",
-  #   is.na(`WBC day +90`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  
   # mutate(Neutropenia_apheresis = case_when(
   #   `ANC apheresis` < 1.8                                           ~ "YES",
   #   is.na(`ANC apheresis`)                                          ~ NA_character_,
@@ -624,10 +570,14 @@ cart0 <- MM_cart %>%
     TRUE                                                          ~ "NO"
   )) %>% 
   mutate(Neutropenia_gr1 = case_when(
-    `ANC Day 7` < 1.8 |
-    `ANC Day 30` < 1.8 |
-      `ANC Day 60` < 1.8 |
-      `ANC Day 90` < 1.8                                          ~ "YES",
+    (`ANC Day 7` < 1.8 &
+      `ANC Day 7` > 1.5) |
+    (`ANC Day 30` < 1.8 &
+      `ANC Day 30` > 1.5) |
+      (`ANC Day 60` < 1.8 &
+      `ANC Day 60` > 1.5) |
+      (`ANC Day 90` < 1.8 &
+      `ANC Day 90` > 1.5)                                          ~ "YES",
     is.na(`ANC Day 7`) |
       is.na(`ANC Day 30`) |
       is.na(`ANC Day 60`) |
@@ -635,10 +585,14 @@ cart0 <- MM_cart %>%
     TRUE                                          ~ "NO"
   )) %>% 
   mutate(Neutropenia_gr2 = case_when(
-    `ANC Day 7` < 1.5 |
-    `ANC Day 30` < 1.5 |
-      `ANC Day 60` < 1.5 |
-      `ANC Day 90` < 1.5                                          ~ "YES",
+    (`ANC Day 7` < 1.5 &
+      `ANC Day 7` > 1) |
+    (`ANC Day 30` < 1.5 &
+      `ANC Day 30` > 1) |
+      (`ANC Day 60` < 1.5 &
+      `ANC Day 60` > 1) |
+      (`ANC Day 90` < 1.5 &
+      `ANC Day 90` > 1)                                          ~ "YES",
     is.na(`ANC Day 7`) |
       is.na(`ANC Day 30`) |
       is.na(`ANC Day 60`) |
@@ -656,26 +610,24 @@ cart0 <- MM_cart %>%
       is.na(`ANC Day 90`)                                          ~ NA_character_,
     TRUE                                          ~ "NO"
   )) %>% 
-  mutate(Neutropenia_gr4 = case_when(
-    `ANC Day 7` < 0.5 |
-    `ANC Day 30` < 0.5 |
-      `ANC Day 60` < 0.5 |
-      `ANC Day 90` < 0.5                                          ~ "YES",
-    is.na(`ANC Day 7`) |
-      is.na(`ANC Day 30`) |
-      is.na(`ANC Day 60`) |
-      is.na(`ANC Day 90`)                                          ~ NA_character_,
-    TRUE                                          ~ "NO"
-  )) %>% 
+  # mutate(Neutropenia_gr4 = case_when(
+  #   `ANC Day 7` < 0.5 |
+  #   `ANC Day 30` < 0.5 |
+  #     `ANC Day 60` < 0.5 |
+  #     `ANC Day 90` < 0.5                                          ~ "YES",
+  #   is.na(`ANC Day 7`) |
+  #     is.na(`ANC Day 30`) |
+  #     is.na(`ANC Day 60`) |
+  #     is.na(`ANC Day 90`)                                          ~ NA_character_,
+  #   TRUE                                          ~ "NO"
+  # )) %>% 
   mutate(any_neutropenia = case_when(
     Neutropenia_gr1 == "YES" |
       Neutropenia_gr2 == "YES" |
-      Neutropenia_gr3 == "YES" |
-      Neutropenia_gr4 == "YES"                                          ~ "YES",
+      Neutropenia_gr3 == "YES"                                          ~ "YES",
     is.na(Neutropenia_gr1) |
           is.na(Neutropenia_gr2) |
-    is.na(Neutropenia_gr3) |
-    is.na(Neutropenia_gr4)                                          ~ NA_character_,
+    is.na(Neutropenia_gr3)                                          ~ NA_character_,
     TRUE                                          ~ "NO"
   )) %>% 
   mutate(severe_neutro_30beyond = case_when(
@@ -689,10 +641,14 @@ cart0 <- MM_cart %>%
   )) %>% 
   
   mutate(Anemia_gr1 = case_when(
-      `HgB Day 7` < 11.4 |
-      `HgB Day 30` < 11.4 |
-      `HgB Day 60` < 11.4 |
-      `HgB Day 90` < 11.4                                        ~ "YES",
+      (`HgB Day 7` < 11.4 &
+      `HgB Day 7` > 10) |
+      (`HgB Day 30` < 11.4 &
+      `HgB Day 30` > 10) |
+      (`HgB Day 60` < 11.4 &
+      `HgB Day 60` > 10) |
+      (`HgB Day 90` < 11.4 &
+      `HgB Day 90` > 10)                                        ~ "YES",
       is.na(`HgB Day 7`) |
       is.na(`HgB Day 30`) |
       is.na(`HgB Day 60`) |
@@ -700,10 +656,14 @@ cart0 <- MM_cart %>%
     TRUE                                          ~ "NO"
   )) %>% 
   mutate(Anemia_gr2 = case_when(
-      `HgB Day 7` < 10 |
-      `HgB Day 30` < 10 |
-      `HgB Day 60` < 10 |
-      `HgB Day 90` < 10                                        ~ "YES",
+      (`HgB Day 7` < 10 &
+      `HgB Day 7` > 8) |
+      (`HgB Day 30` < 10 &
+      `HgB Day 30` > 8) |
+      (`HgB Day 60` < 10 &
+      `HgB Day 60` > 8) |
+      (`HgB Day 90` < 10 &
+      `HgB Day 90` > 8)                                        ~ "YES",
       is.na(`HgB Day 7`) |
       is.na(`HgB Day 30`) |
       is.na(`HgB Day 60`) |
@@ -721,17 +681,17 @@ cart0 <- MM_cart %>%
       is.na(`HgB Day 90`)                                          ~ NA_character_,
     TRUE                                          ~ "NO"
   )) %>% 
-  mutate(Anemia_gr4 = case_when(
-      `HgB Day 7` < 0.1 |
-      `HgB Day 30` < 0.1 |
-      `HgB Day 60` < 0.1 |
-      `HgB Day 90` < 0.1                                        ~ "YES",
-      is.na(`HgB Day 7`) |
-      is.na(`HgB Day 30`) |
-      is.na(`HgB Day 60`) |
-      is.na(`HgB Day 90`)                                          ~ NA_character_,
-    TRUE                                          ~ "NO"
-  )) %>% 
+  # mutate(Anemia_gr4 = case_when(
+  #     `HgB Day 7` < 0.1 |
+  #     `HgB Day 30` < 0.1 |
+  #     `HgB Day 60` < 0.1 |
+  #     `HgB Day 90` < 0.1                                        ~ "YES",
+  #     is.na(`HgB Day 7`) |
+  #     is.na(`HgB Day 30`) |
+  #     is.na(`HgB Day 60`) |
+  #     is.na(`HgB Day 90`)                                          ~ NA_character_,
+  #   TRUE                                          ~ "NO"
+  # )) %>% 
   mutate(severe_anemia_30beyond = case_when(
     `HgB Day 30` < 8 |
       `HgB Day 60` < 8 |
@@ -743,10 +703,14 @@ cart0 <- MM_cart %>%
   )) %>% 
   
   mutate(Thrombocytopenia_gr1 = case_when(
-      `Platelets Day 7` < 143 |
-      `Plateletes Day 30` < 143 |
-      `Platelets Day 60` < 143 |
-      `Platelets Day 90` < 143                                        ~ "YES",
+      (`Platelets Day 7` < 143 &
+      `Platelets Day 7` > 75) |
+      (`Plateletes Day 30` < 143 &
+      `Plateletes Day 30` > 75) |
+      (`Platelets Day 60` < 143 &
+      `Platelets Day 60` > 75) |
+      (`Platelets Day 90` < 143 &
+      `Platelets Day 90` > 75)                                        ~ "YES",
       is.na(`Platelets Day 7`) |
       is.na(`Plateletes Day 30`) |
       is.na(`Platelets Day 60`) |
@@ -754,10 +718,14 @@ cart0 <- MM_cart %>%
     TRUE                                          ~ "NO"
   )) %>% 
   mutate(Thrombocytopenia_gr2 = case_when(
-      `Platelets Day 7` < 75 |
-      `Plateletes Day 30` < 75 |
-      `Platelets Day 60` < 75 |
-      `Platelets Day 90` < 75                                        ~ "YES",
+      (`Platelets Day 7` < 75 &
+      `Platelets Day 7` > 50) |
+      (`Plateletes Day 30` < 75 &
+      `Plateletes Day 30` > 50) |
+      (`Platelets Day 60` < 75 &
+      `Platelets Day 60` > 50) |
+      (`Platelets Day 90` < 75 &
+      `Platelets Day 90` > 50)                                        ~ "YES",
       is.na(`Platelets Day 7`) |
       is.na(`Plateletes Day 30`) |
       is.na(`Platelets Day 60`) |
@@ -775,17 +743,17 @@ cart0 <- MM_cart %>%
       is.na(`Platelets Day 90`)                                          ~ NA_character_,
     TRUE                                          ~ "NO"
   )) %>% 
-  mutate(Thrombocytopenia_gr4 = case_when(
-      `Platelets Day 7` < 25 |
-      `Plateletes Day 30` < 25 |
-      `Platelets Day 60` < 25 |
-      `Platelets Day 90` < 25                                        ~ "YES",
-      is.na(`Platelets Day 7`) |
-      is.na(`Plateletes Day 30`) |
-      is.na(`Platelets Day 60`) |
-      is.na(`Platelets Day 90`)                                          ~ NA_character_,
-    TRUE                                          ~ "NO"
-  )) %>% 
+  # mutate(Thrombocytopenia_gr4 = case_when(
+  #     `Platelets Day 7` < 25 |
+  #     `Plateletes Day 30` < 25 |
+  #     `Platelets Day 60` < 25 |
+  #     `Platelets Day 90` < 25                                        ~ "YES",
+  #     is.na(`Platelets Day 7`) |
+  #     is.na(`Plateletes Day 30`) |
+  #     is.na(`Platelets Day 60`) |
+  #     is.na(`Platelets Day 90`)                                          ~ NA_character_,
+  #   TRUE                                          ~ "NO"
+  # )) %>% 
   mutate(severe_throm_30beyond = case_when(
     `Plateletes Day 30` < 50 |
       `Platelets Day 60` < 50 |
@@ -866,20 +834,7 @@ cart0 <- MM_cart %>%
   )) %>% 
   
   mutate(`Day 30 Response (sCR, CR, VGPR, PR)` = case_when(
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "evaluable")   ~ NA_character_,
-    `Day 30 Response (sCR, CR, VGPR, PR)` == "CR"	                   ~ "CR, MRD unknown",
-    `Day 30 Response (sCR, CR, VGPR, PR)` == "CR, MRD+"	             ~ "CR, MRD+",
-    
-    `Day 30 Response (sCR, CR, VGPR, PR)` == "sCR, MRD+"           	 ~ "sCR, MRD+",
-    `Day 30 Response (sCR, CR, VGPR, PR)` %in% c(
-      "sCR MRD-", "sCR, MRD-")                                                         ~ "sCR, MRD-",
-    
-    `Day 30 Response (sCR, CR, VGPR, PR)` %in% c(
-      "sCR", "sCR (flow neg, no clonoSEQ ID)", "sCR MRD - by flow/no clonoSEQ)",
-      "sCR, MRD- by flow/no clonoSEQ)")                                                ~ "sCR, MRD unknown",
-    
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "Not")         ~ NA_character_,
     TRUE           ~ `Day 30 Response (sCR, CR, VGPR, PR)`
   )) %>% 
   mutate(ORR_30days = case_when(
@@ -893,18 +848,17 @@ cart0 <- MM_cart %>%
   #   str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD")         ~ "No",
   #   TRUE                             ~ NA_character_
   # )) %>% 
-  mutate(day30_response = case_when(
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "sCR")	       ~ "sCR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR")	         ~ "CR",
-    is.na(`Day 30 Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
-    TRUE           ~ `Day 30 Response (sCR, CR, VGPR, PR)`
-  )) %>% 
+  mutate(day30_response = `Day 30 Response (sCR, CR, VGPR, PR)`
+  ) %>% 
   mutate(day30_response_group = case_when(
     str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
     str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR")	         ~ "CR or sCR",
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR") &
+      str_detect(`Day 30 MRD (positive vs negative)`, "MRD-")        ~ "CR or sCR, MRD-",
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR") &
+      str_detect(`Day 30 MRD (positive vs negative)`, "MRD+")        ~ "CR or sCR, MRD+",
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR") &
+      is.na(`Day 30 MRD (positive vs negative)`)                     ~ "CR or sCR, MRD unknown",
     is.na(`Day 30 Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
     TRUE           ~ `Day 30 Response (sCR, CR, VGPR, PR)`
   )) %>% 
@@ -915,23 +869,8 @@ cart0 <- MM_cart %>%
   )) %>% 
   
   mutate(`3 Month Response (sCR, CR, VGPR, PR)` = case_when(
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "SD")        ~ "SD",
     str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "evaluable")   ~ NA_character_,
-    
-    `3 Month Response (sCR, CR, VGPR, PR)` %in% c(
-      "CR", "CR (no clonoSEQ/MRD as no marrow)")                                      ~ "CR, MRD unknown",
-    
-    `3 Month Response (sCR, CR, VGPR, PR)` %in% c(
-      "sCR (clonoSEQ pending, flow neg)", 
-      "sCR (no clonoSEQ for MRD, flow suspicious for MRD)",
-      "sCR (no clonoSEQ, flow neg)")                                                  ~ "sCR, MRD unknown",
-    
-    `3 Month Response (sCR, CR, VGPR, PR)` %in% c(
-      "sCR, MRD - (by flow+)", "sCR, MRD-	12 (24%)")                                  ~ "sCR, MRD-",
-    
-    `3 Month Response (sCR, CR, VGPR, PR)` == "sCR, MRD+"	            ~	"sCR, MRD+",
-    
     TRUE           ~ `3 Month Response (sCR, CR, VGPR, PR)`
   )) %>% 
   mutate(ORR_90days = case_when(
@@ -948,39 +887,47 @@ cart0 <- MM_cart %>%
   mutate(day90_response_group = case_when(
     str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
     str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR")	        ~ "CR or sCR",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR") &
+      str_detect(`3 Month MRD (positive vs negative)`, "MRD-")        ~ "CR or sCR, MRD-",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR") &
+      str_detect(`3 Month MRD (positive vs negative)`, "MRD+")        ~ "CR or sCR, MRD+",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR") &
+      is.na(`3 Month MRD (positive vs negative)`)                     ~ "CR or sCR, MRD unknown",
     is.na(`3 Month Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
     TRUE           ~ `3 Month Response (sCR, CR, VGPR, PR)`
   )) %>% 
-  mutate(day90_response = case_when(
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "sCR")	        ~ "sCR",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR")	        ~ "CR",
-    is.na(`3 Month Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
-    TRUE           ~ `3 Month Response (sCR, CR, VGPR, PR)`
-  )) %>% 
+  mutate(day90_response =`3 Month Response (sCR, CR, VGPR, PR)`
+  ) %>% 
   mutate(day90_response_sCRvsOthers = case_when(
     str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR")	         ~ "CR or sCR",
     is.na(`3 Month Response (sCR, CR, VGPR, PR)`)                      ~ NA_character_,
     TRUE           ~ "Others"
   )) %>% 
   mutate(best_response = case_when(
-    day30_response_group == "CR or sCR" |
-      day90_response_group == "CR or sCR"                                             ~ "CR or sCR",
+    day30_response_group == "CR or sCR, MRD-" |
+      day90_response_group == "CR or sCR, MRD-"                        ~ "CR or sCR, MRD-",
+    day30_response_group == "CR or sCR, MRD+" |
+      day90_response_group == "CR or sCR, MRD+"                        ~ "CR or sCR, MRD+",
+    day30_response_group == "CR or sCR, MRD unknown" |
+      day90_response_group == "CR or sCR, MRD unknown"                 ~ "CR or sCR, MRD unknown",
     day30_response_group == "VGPR" |
-      day90_response_group == "VGPR"                                                  ~ "VGPR",
+      day90_response_group == "VGPR"                                   ~ "VGPR",
     day30_response_group == "PR" |
-      day90_response_group == "PR"                                                    ~ "PR",
-    TRUE                                                                        ~ NA_character_
+      day90_response_group == "PR"                                     ~ "PR",
+    
+    day30_response_group %in% c("MR", "PD", "SD") |
+      day90_response_group %in% c("MR", "PD", "SD")                    ~ "Others",
+    
+    
+    TRUE                                                               ~ NA_character_
   )) %>% 
-  mutate(MRDneg_in_best_response = case_when(
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "MRD-") |
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD-")        ~ "Yes",
-    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "MRD") |
-    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD")         ~ "No",
-    TRUE                             ~ NA_character_
-  )) %>% 
+  # mutate(MRDneg_in_best_response = case_when(
+  #   str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "MRD-") |
+  #   str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD-")        ~ "Yes",
+  #   str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "MRD") |
+  #   str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD")         ~ "No",
+  #   TRUE                             ~ NA_character_
+  # )) %>% 
   mutate(pfs_event = case_when(
     is.na(`Date of PD`)                                ~ 0,
     !is.na(`Date of PD`)                               ~ 1,
@@ -1212,16 +1159,22 @@ cart0 %>%
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
+         Blenrep,`BCMA CAR-T on trial`, `Other BCMA trial`,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
          
          `Cell Dose (million cells)`,
+         exclusion_criteria,
+         
          `ECOG > or = 2? (Yes, No)`,
          `ANC < 1000/uL (Yes, No)`,
          `Hemoglobin < 8 g/dL (Yes, No)`,
          `Platelets < 50K (Yes, No)`, 
          `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
          `Non-secretory MM (Yes, No)`,
-         
+         `H/O or presence of CNS pathology (epilepsy, seizure, paresis, aphasia, stroke, CNS bleed, brian injuries, dementia, Parkinson's disease, cerebellar disease, organic brain syndrome, or psychosis) (Yes, No)`,
+         `Prior Allo SCT (Yes, No)`,
+         `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
+         comorbidities,
 
          `Did patient met criteria for KarMMa1 pre-CAR-T?`) %>% 
   tbl_summary(
@@ -1237,9 +1190,19 @@ cart0 %>%
     `Deletion 17p prior to CAR-T infusion (yes, no)`,
         `t(4:14) prior to CAR-T infusion (yes, no)`,
         `t(14:16) prior to CAR-T infusion (yes, no)`,
-    #     `Bridging Therapy? (Yes, No)`, `Prior auto SCT (yes, no)`,
+    `Prior auto SCT (yes, no)`, 
+         `ASCT within 12 weeks prior to apheresis (Yes, No)`,
+         `Prior Allo SCT (Yes, No)`,
+         `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
+         Blenrep,`BCMA CAR-T on trial`, `Other BCMA trial`,
         immuno, proteasome, dara, doubleref, tripleref, pentaref,
-    #     `Did patient met criteria for KarMMa1 pre-CAR-T?`
+    `ECOG > or = 2? (Yes, No)`,
+         `ANC < 1000/uL (Yes, No)`,
+         `Hemoglobin < 8 g/dL (Yes, No)`,
+         `Platelets < 50K (Yes, No)`, 
+         `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
+    `H/O or presence of CNS pathology (epilepsy, seizure, paresis, aphasia, stroke, CNS bleed, brian injuries, dementia, Parkinson's disease, cerebellar disease, organic brain syndrome, or psychosis) (Yes, No)`,
+        `Did patient met criteria for KarMMa1 pre-CAR-T?`
     )
       ~"categorical"),
     
@@ -1265,11 +1228,11 @@ cart0 %>%
          `Tocilizumab (Yes, No)`, `Steroid use (Yes, No)`, `Anakinra (Yes, No)`,
          any_neutropenia,
          Neutropenia_gr1, Neutropenia_gr2, 
-         Neutropenia_gr3, Neutropenia_gr4,
+         Neutropenia_gr3,
          Anemia_gr1, Anemia_gr2,
-         Anemia_gr3, Anemia_gr4,
+         Anemia_gr3,
          Thrombocytopenia_gr1, Thrombocytopenia_gr2,
-         Thrombocytopenia_gr3, Thrombocytopenia_gr4,
+         Thrombocytopenia_gr3,
          severe_neutro_30beyond, severe_anemia_30beyond,
          severe_throm_30beyond,
          
@@ -1285,11 +1248,11 @@ cart0 %>%
         `Anakinra (Yes, No)`,
         any_neutropenia,
          Neutropenia_gr1, Neutropenia_gr2, 
-         Neutropenia_gr3, Neutropenia_gr4,
+         Neutropenia_gr3,
          Anemia_gr1, Anemia_gr2,
-         Anemia_gr3, Anemia_gr4,
+         Anemia_gr3,
          Thrombocytopenia_gr1, Thrombocytopenia_gr2,
-         Thrombocytopenia_gr3, Thrombocytopenia_gr4,
+         Thrombocytopenia_gr3,
         severe_neutro_30beyond, severe_anemia_30beyond,
          severe_throm_30beyond,
         `Need for GCSF`,
@@ -1301,88 +1264,6 @@ cart0 %>%
     missing = "no") %>% 
   bold_labels() %>% add_stat_label() %>% 
   modify_footnote(update = everything() ~ NA)
-
-# tbl2 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(`Steroid use (Yes, No)`, `Tocilizumab (Yes, No)`, 
-#          `Anakinra (Yes, No)`) %>% 
-#   tbl_summary(type = list(
-#     c(`Steroid use (Yes, No)`, `Tocilizumab (Yes, No)`, 
-#       `Anakinra (Yes, No)`) ~ "categorical"),
-#     statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-#     digits = all_continuous() ~ 1) %>% 
-#   bold_labels() %>% add_stat_label()
-# 
-# tbl3 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(#MRDneg_30days,
-#          ORR_30days,
-#          day30_response,
-#          day30_response_group) %>% 
-#   tbl_summary(#type = list(
-#     # c(MRDneg_30days) ~ "categorical"),
-#     digits = all_continuous() ~ 1,
-#     missing = "no") %>% 
-#   bold_labels() %>% add_stat_label()
-# 
-# # tbl4 <- cart0 %>% 
-# #   distinct(patient_id, .keep_all = TRUE) %>% 
-# #   filter(day30_response_group == "CR or sCR") %>% 
-# #   select(MRDneg_30days) %>% 
-# #   tbl_summary(type = list(c(MRDneg_30days) ~ "categorical"),
-# #               label = list(MRDneg_30days ~ "MRDneg_30days within CR/sCR"),
-# #               digits = all_continuous() ~ 1,
-# #               missing = "no") %>% 
-# #   bold_labels() %>% add_stat_label()
-# 
-# tbl5 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(#MRDneg_90days,
-#          ORR_90days,
-#          day90_response,
-#          day90_response_group) %>% 
-#   tbl_summary(#type = list(
-#     # c(MRDneg_90days) ~ "categorical"),
-#     digits = all_continuous() ~ 1,
-#     missing = "no") %>% 
-#   bold_labels() %>% add_stat_label()
-# 
-# # tbl6 <- cart0 %>% 
-# #   distinct(patient_id, .keep_all = TRUE) %>% 
-# #   filter(day90_response_group == "CR or sCR") %>% 
-# #   select(MRDneg_90days) %>% 
-# #   tbl_summary(type = list(c(MRDneg_90days) ~ "categorical"),
-# #               label = list(MRDneg_90days ~ "MRDneg_90days within CR/sCR"),
-# #               digits = all_continuous() ~ 1,
-# #               missing = "no") %>% 
-# #   bold_labels() %>% add_stat_label()
-# 
-# tbl7 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(best_response) %>% 
-#   tbl_summary(#type = list(c(MRDneg_90days) ~ "categorical"),
-#               label = list(best_response ~ "best response in the first 90 days"),
-#               digits = all_continuous() ~ 1,
-#               missing = "no") %>% 
-#   bold_labels() %>% add_stat_label()
-# 
-# tbl8 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   filter(best_response == "CR or sCR") %>% 
-#   select(MRDneg_in_best_response) %>% 
-#   tbl_summary(type = list(c(MRDneg_in_best_response) ~ "categorical"),
-#               label = list(MRDneg_in_best_response ~ "MRDneg_in_best_response within CR/sCR"),
-#               statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-#               digits = all_continuous() ~ 1,
-#               missing = "no") %>% 
-#   bold_labels() %>% add_stat_label()
-# 
-# 
-# 
-# tbl_stack(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8)) %>% as_gt() %>%
-#   gt::tab_source_note(gt::md("**
-#                              **"))
-
 ```
 
 ## Table 3.Characteristics associated with grade ≥ 3 CRS, grade ≥ 3 neurotoxicity, grade ≥ 3 cytopenias ≥ 30 days, best response of ≥ CR at 3 months, best ORR 
@@ -2091,20 +1972,24 @@ cart0 %>%
 ### Figures
 
 ## Figure 1. Response rate bar graph for day 30, day 90, Best ORR
-**Need to include MRD in the var**
 ```{r}
 cart0 %>% 
   select(day30_response_group, day90_response_group, best_response) %>% 
   pivot_longer(cols = everything()) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = factor(value, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>% 
   group_by(name, value) %>% 
   summarise(count=n()) %>% 
   mutate(percent=(count/sum(count)*100)
   ) %>% 
-  filter(!is.na(value)) %>% 
+  filter(str_detect(value, "CR") | str_detect(value, "PR")) %>% 
   ggplot(aes(x= name, y= percent, fill= value))+
   geom_bar(stat = "identity")+
-  scale_fill_brewer(palette = "RdBu")+
-  # labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
+  scale_fill_brewer(palette = "Spectral")+
+  labs(x= NULL)+
   theme_classic()
 ```
 
@@ -2171,441 +2056,103 @@ Panel D: Duration of response graph
 
 ## Figure 2. Consort diagram
 
- 
 
-<!-- ## Figure 2. Inflammatory markers after ide-cel -->
-```{r, fig.height=12}
-# LDH <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(`LDH at Pre-Leukapheresis`, `LDH day -5`, `LDH day 0`, 
-#          `LDH day +7`, `LDH day +14`, `LDH day +21`, `LDH day +30`)
-# LDH_long <- gather(LDH, day, LDH_value, `LDH at Pre-Leukapheresis`:`LDH day +30`)
-# LDH_long$day[LDH_long$day=="LDH at Pre-Leukapheresis"] <- "Pre"
-# LDH_long$day[LDH_long$day=="LDH day -5"] <- "Day -5"
-# LDH_long$day[LDH_long$day=="LDH day 0"] <- "Day 0"
-# LDH_long$day[LDH_long$day=="LDH day +7"] <- "Day 7"
-# LDH_long$day[LDH_long$day=="LDH day +14"] <- "Day 14"
-# LDH_long$day[LDH_long$day=="LDH day +21"] <- "Day 21"
-# LDH_long$day[LDH_long$day=="LDH day +30"] <- "Day 30"
-# LDH_long$day <- factor(LDH_long$day, levels = c("Pre", "Day -5", "Day 0", 
-#                                                 "Day 7", "Day 14", "Day 21", "Day 30"))
-# # ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
-# #   geom_boxplot() + xlab("Days") + ylab("LDH") + 
-# #   geom_jitter(color= "grey")+
-# #   theme_classic() + ggtitle("LDH") + 
-# #   expand_limits(y = c(0, 7000)) + 
-# #   scale_y_break(c(1188, 4000), 
-# #                 ticklabels=c(4000, 7000), scales=0.10) 
-# 
-# # cart0$`Ferritin day +7`[cart0$`Ferritin day +7`==">33511"] <- 33511
-# # cart0$`Ferritin day +7` <- as.numeric(cart0$`Ferritin day +7`)
-# Ferritin <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(patient_id, `Ferritin at Pre-Leukapheresis`, `Ferritin day -5`,
-#          `Ferritin day 0`, `Ferritin day +7`, `Ferritin day +14`, 
-#          `Ferritin day +21`, `Ferritin day +30`)
-# Ferritin_long <- gather(Ferritin, day, Ferritin_value, `Ferritin at Pre-Leukapheresis`:`Ferritin day +30`)
-# Ferritin_long$day[Ferritin_long$day=="Ferritin at Pre-Leukapheresis"] <- "Pre"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day -5"] <- "Day -5"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day 0"] <- "Day 0"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day +7"] <- "Day 7"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day +14"] <- "Day 14"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day +21"] <- "Day 21"
-# Ferritin_long$day[Ferritin_long$day=="Ferritin day +30"] <- "Day 30"
-# Ferritin_long$day <- factor(Ferritin_long$day, levels = c("Pre", "Day -5", "Day 0",
-#                                                           "Day 7", "Day 14", "Day 21", "Day 30"))
-# # ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
-# #   geom_boxplot() + 
-# #   xlab("Days") + ylab("Ferritin") + 
-# #   theme_classic() + ggtitle("Ferritin") + 
-# #   expand_limits(y = c(0, 34000)) +
-# #   scale_y_break(c(13600, 33000), ticklabels=c(33000, 34000), scales=0.10)
-# 
-# # cart0$`CRP Pre-Leukapheresis`[cart0$`CRP Pre-Leukapheresis`=="<0.03"] <- 0.07
-# # cart0$`CRP Pre-Leukapheresis` <- as.numeric(cart0$`CRP Pre-Leukapheresis`)
-# # cart0$`CRP day +14`[cart0$`CRP day +14`=="<0.03"] <- 0.07
-# # cart0$`CRP day +14` <- as.numeric(cart0$`CRP day +14`)
-# # cart0$`CRP day +21`[cart0$`CRP day +21`=="<0.03"] <- 0.07
-# # cart0$`CRP day +21` <- as.numeric(cart0$`CRP day +21`)
-# # cart0$`CRP day +30`[cart0$`CRP day +30`=="<0.03"] <- 0.07
-# # cart0$`CRP day +30` <- as.numeric(cart0$`CRP day +30`)
-# CRP <- cart0 %>%
-#   distinct(patient_id, .keep_all = TRUE) %>% 
-#   select(`CRP Pre-Leukapheresis`, `CRP day -5`, `CRP day 0`,
-#          `CRP day +7`, `CRP day +14`, `CRP day +21`, `CRP day +30`)
-# CRP_long <- gather(CRP, day, CRP_value, `CRP Pre-Leukapheresis`:`CRP day +30`)
-# CRP_long$day[CRP_long$day=="CRP Pre-Leukapheresis"] <- "Pre"
-# CRP_long$day[CRP_long$day=="CRP day -5"] <- "Day -5"
-# CRP_long$day[CRP_long$day=="CRP day 0"] <- "Day 0"
-# CRP_long$day[CRP_long$day=="CRP day +7"] <- "Day 7"
-# CRP_long$day[CRP_long$day=="CRP day +14"] <- "Day 14"
-# CRP_long$day[CRP_long$day=="CRP day +21"] <- "Day 21"
-# CRP_long$day[CRP_long$day=="CRP day +30"] <- "Day 30"
-# CRP_long$day <- factor(CRP_long$day, levels = c("Pre", "Day -5", "Day 0", "Day 7", "Day 14", "Day 21", "Day 30"))
-# # ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-# #   geom_boxplot() + 
-# #   xlab("Days") + ylab("CRP") + 
-# #   theme_classic() + ggtitle("CRP") + 
-# #   expand_limits(y = c(0, 20)) +
-# #   scale_y_break(c(4.55, 7.5, 9.5, 18.0), ticklabels=c(8,9,18, 20), 
-# #                 scales=c(0.10)
-# #                 )
-# 
-# # ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-# #   geom_violin() + 
-# #   xlab("Days") + ylab("CRP") + 
-# #   theme_classic() + ggtitle("CRP")+
-# #   expand_limits(y = c(0, 20)) +
-# #   scale_y_break(c(5.9, 18.0), ticklabels=c(18, 20), 
-# #                 scales=c(0.25)
-# #                 )
-# # 
-# # ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-# #   geom_violin() + 
-# #   xlab("Days") + ylab("CRP") + 
-# #   theme_classic() + ggtitle("log10 CRP") + 
-# #   expand_limits(y = c(0, 100)) +
-# #   scale_y_log10()
-# # 
-# # ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-# #   geom_violin() + 
-# #   xlab("Days") + ylab("log2 CRP") + 
-# #   theme_classic() + ggtitle("CRP") + 
-# #   # expand_limits(y = c(0, 100)) +
-# #   scale_y_continuous(trans = "log2")
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# #   geom_jitter(color= "grey")+
-# 
-# 
-# 
-# a <- ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
-#   geom_boxplot() + 
-#   xlab("Days") + ylab("LDH represented with a log2 scale") + 
-#   theme_classic() + ggtitle("LDH") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5 
-#                      # aes(label = paste0("p = ", ..p.format..))
-#   #                  aes(
-#   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
-#   )
-# 
-# b <- ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
-#   geom_boxplot() + 
-#   xlab("Days") + ylab("Ferritin represented with a log2 scale") + 
-#   theme_classic() + ggtitle("Ferritin") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5)
-# 
-# c <- ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-#   geom_boxplot() + 
-#   xlab("Days") + ylab("CRP represented with a log2 scale") + 
-#   theme_classic() + ggtitle("CRP") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5)
-# 
-# (a) /
-# (b) /
-# (c)+
-# plot_annotation(tag_levels = "A")
-# 
-# a <- ggplot(LDH_long, aes(x=day, y=LDH_value)) + 
-#   geom_boxplot() + 
-#   geom_jitter(color= "grey")+
-#   xlab("Days") + ylab("LDH represented with a log2 scale") + 
-#   theme_classic() + ggtitle("LDH") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5 
-#                      # aes(label = paste0("p = ", ..p.format..))
-#   #                  aes(
-#   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
-#   )
-# 
-# b <- ggplot(Ferritin_long, aes(x=day, y=Ferritin_value)) + 
-#   geom_boxplot() + 
-#   geom_jitter(color= "grey")+
-#   xlab("Days") + ylab("Ferritin represented with a log2 scale") + 
-#   theme_classic() + ggtitle("Ferritin") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5)
-# 
-# c <- ggplot(CRP_long, aes(x=day, y=CRP_value)) + 
-#   geom_boxplot() + 
-#   geom_jitter(color= "grey")+
-#   xlab("Days") + ylab("CRP represented with a log2 scale") + 
-#   theme_classic() + ggtitle("CRP") + 
-#   scale_y_continuous(trans = "log2") +
-#   stat_compare_means(label.x = 5)
-# 
-# (a) /
-# (b) /
-# (c) +
-# plot_annotation(tag_levels = "A")
-```
+## Table X. Patients’ response to Idecabtagene Vicleucel
 
-<!-- ## Figure 3. Cellular and humoral immune reconstitution after ide-cel -->
-```{r, fig.width=12, fig.height=12}
-# cart2 <- cart0 %>% 
-#   distinct(patient_id, .keep_all = TRUE)
-# # WBC
-# timepoints <- c(-28, -5, 0, 7, 14, 21, 30, 60, 90)
-# WBC_fig <-
-#   data.frame(timepoints,
-#              t(round(
-#                sapply(cart2[, c(
-#                  "WBC apheresis",
-#                  "WBC day -5 (k/ul)",
-#                  "WBC day 0 (k/uL)",
-#                  "WBC day +7",
-#                  "WBC day +14",
-#                  "WBC day +21",
-#                  "WBC day +30",
-#                  "WBC day +60",
-#                  "WBC day +90"
-#                )],
-#                MedianCI,
-#                conf.level = 0.95,
-#                na.rm = TRUE), 9
-#              )))
-# WBC_fig <- WBC_fig %>%
-#   ggplot(aes(x = timepoints, y = median)) + 
-#   geom_line(col = "blue") + 
-#   xlab("Days relative to infusion") + 
-#   ylab("Median WBC") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
-#     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
-#   ) + ylim(0, 6)
-# 
-# # ANC
-# ANC_fig <-
-#   data.frame(timepoints, t(round(
-#     sapply(cart2[, c(
-#       "ANC apheresis",
-#       "ANC day -5 (k/ul)",
-#       "ANC day 0 (k/uL)",
-#       "ANC Day 7",
-#       "ANC day +14",
-#       "ANC day +21",
-#       "ANC Day 30",
-#       "ANC Day 60",
-#       "ANC Day 90"
-#     )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
-#   )))
-# ANC_fig <- ANC_fig %>% 
-#   ggplot(aes(x = timepoints, y = median)) + 
-#   geom_line(col = "blue") + 
-#   xlab("Days relative to infusion") + 
-#   ylab("Median ANC") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
-#     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
-#   ) + 
-#   ylim(0, 4)
-# 
-# Hb_fig <-
-#   data.frame(timepoints, t(round(
-#     sapply(cart2[, c(
-#       "Hb apheresis",
-#       "Hb day -5 (k/ul)",
-#       "Hb day 0 (k/uL)",
-#       "HgB Day 7",
-#       "Hb day +14",
-#       "Hb day +21",
-#       "HgB Day 30",
-#       "HgB Day 60",
-#       "HgB Day 90"
-#     )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
-#   )))
-# Hb_fig <- Hb_fig %>% 
-#   ggplot(aes(x = timepoints, y = median)) + 
-#   geom_line(col = "blue") + 
-#   xlab("Days relative to infusion") + 
-#   ylab("Median Hb") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
-#     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
-#   ) + 
-#   ylim(7.5, 12)
-# 
-# # ALC
-# ALC_fig <-
-#   data.frame(timepoints, t(round(
-#     sapply(cart2[, c(
-#       "ALC apheresis",
-#       "ALC day -5 (k/ul)",
-#       "ALC day 0 (k/uL)",
-#       "ALC day +7",
-#       "ALC day +14",
-#       "ALC day +21",
-#       "ALC day +30",
-#       "ALC day +60",
-#       "ALC day +90"
-#     )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
-#   )))
-# ALC_fig <- ALC_fig %>% 
-#   ggplot(aes(x = timepoints, y = median)) + 
-#   geom_line(col = "blue") + 
-#   xlab("Days relative to infusion") + 
-#   ylab("Median ALC") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
-#     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
-#   ) + 
-#   ylim(0, 1.1)
-# 
-# # Plt
-# Plt_fig <-
-#   data.frame(timepoints, t(round(
-#     sapply(cart2[, c(
-#       "Plt apheresis",
-#       "Plt day -5 (k/ul)",
-#       "Plt day 0 (k/uL)",
-#       "Platelets Day 7",
-#       "Plt day +14",
-#       "Plt day +21",
-#       "Plateletes Day 30",
-#       "Platelets Day 60",
-#       "Platelets Day 90"
-#     )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
-#   )))
-# Plt_fig <- Plt_fig %>% 
-#   ggplot(aes(x = timepoints, y = median)) + 
-#   geom_line(col = "blue") + 
-#   xlab("Days relative to infusion") + 
-#   ylab("Median Plt") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
-#     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
-#   ) +
-#   ylim(20, 170)
-# 
-# # IgG
-# #table(cart2$`IgG day +90`)
-# #table(cart2$`IgG day +180`)
-# # cart2$`IgG day +90`[cart2$`IgG day +90` == "<109"] <- 77
-# # cart2$`IgG day +30`[cart2$`IgG day +30` == "<109"] <- 77
-# # cart2$`IgG day -5`[cart2$`IgG day -5` == "<109"] <- 77
-# # cart2$`IgG apheresis`[cart2$`IgG apheresis` == "<109"] <- 77
-# # 
-# # cart2$`IgG day +90` <- as.numeric(cart2$`IgG day +90`)
-# # cart2$`IgG day +30` <- as.numeric(cart2$`IgG day +30`)
-# # cart2$`IgG day -5` <- as.numeric(cart2$`IgG day -5`)
-# # cart2$`IgG apheresis` <- as.numeric(cart2$`IgG apheresis`)
-# timepoints2 <- c(-28, -5, 30, 90)
-# IgG_fig <-
-#   data.frame(timepoints2, t(round(
-#     sapply(cart2[, c(
-#       "IgG apheresis", 
-#       "IgG day -5",
-#       # "IgG day 0 (k/uL)", 
-#       "IgG day +30", 
-#       "IgG day +90")], MedianCI, conf.level =
-#              0.95, na.rm = TRUE), 9
-#   )))
-# IgG_fig <- IgG_fig %>% 
-#   ggplot(aes(x = timepoints2, y = median)) + 
-#   geom_line(col = "blue") +
-#   xlab("Days relative to infusion") + 
-#   ylab("Median IgG") + 
-#   theme_classic() + 
-#   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-#   scale_x_continuous(
-#     breaks = c(-28, -5, 0, 30, 90),
-#     labels = c("Apheresis", "-5", "0", "30", "90"))# + 
-#   # ylim(0, 2000)
-# 
-# (WBC_fig | ANC_fig) /
-#   (Hb_fig | ALC_fig) /
-#   (Plt_fig | IgG_fig) +
-#   plot_annotation(tag_levels = "A")
-```
-
-<!-- <span style="color:blue">**IgG I need to fix the other 109**</span>  -->
-
-<!-- Values less than the limit of detection (<109) were considered to be 77 which is the lower limit of detection divided by the square root of 2. One patient had an IgG day 0 value of <320. As this is above the limit of detection, I used the midway point between 320 and the lower limit of detection -- 214 -- as the value instead of <320.  -->
-
-<br>
-
-
-<!-- ## Figure 4. Cytopenias over time -->
-
-<!-- As discussed at meeting, rather than showing count recovery over time plan to show Grade 3+ cytopenias (Hb, Plt, ANC, WBC) over time (Day –5, Day +30, Day +60, Day +90) -->
-<!-- **We want grade 3 only right?** -->
 ```{r}
-# a <- cart2 %>% 
-#   select(patient_id,
-#          Leukopenia_apheresis,
-#          `Leukopenia_-5d`, Leukopenia_30d, Leukopenia_60d, Leukopenia_90d,
-#          Neutropenia_apheresis,
-#          `Neutropenia_-5d`, Neutropenia_30d, Neutropenia_60d, Neutropenia_90d,
-#          Anemia_apheresis,
-#          `Anemia_-5d`, Anemia_30d, Anemia_60d, Anemia_90d,
-#          Thrombocytopenia_apheresis,
-#          `Thrombocytopenia_-5d`, Thrombocytopenia_30d, Thrombocytopenia_60d, Thrombocytopenia_90d,
-#          
-#          gr3_Leukopenia_apheresis,
-#          `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
-#          gr3_Neutropenia_apheresis,
-#          `gr3_Neutropenia_-5d`, gr3_Neutropenia_30d, gr3_Neutropenia_60d, gr3_Neutropenia_90d,
-#          gr3_Anemia_apheresis,
-#          `gr3_Anemia_-5d`, gr3_Anemia_30d, gr3_Anemia_60d, gr3_Anemia_90d,
-#          gr3_Thrombocytopenia_apheresis,
-#          `gr3_Thrombocytopenia_-5d`, gr3_Thrombocytopenia_30d, gr3_Thrombocytopenia_60d, gr3_Thrombocytopenia_90d
-#   ) %>% 
-#   pivot_longer(cols = `Leukopenia_apheresis`: gr3_Thrombocytopenia_90d) %>% 
-#   mutate(grade = str_match(name, "(gr3_)(.*)")[,2],
-#          grade = case_when(
-#            grade == "gr3_"       ~ "Grade 3+",
-#            TRUE                  ~ "Any grade"
-#          )) %>% 
-#   mutate(name1 = str_match(name, "(gr3_)(.*)")[,3],
-#          name2 = coalesce(name1, name)) %>% 
-#   group_by(name2, value, grade) %>% 
-#   filter(!is.na(value)) %>%
-#   summarise(count=n()) %>%
-#   group_by(name2, grade) %>% 
-#   mutate(perc=(count/sum(count)*100)
-#   ) %>%
-#   separate("name2", into = c("name", "day"), sep = "_") %>% 
-#   ungroup() %>% 
-#   filter(value == "YES") %>% 
-#   add_row("name"="Leukopenia",  "day"="apheresis", "value"= "YES", "grade"="Any grade", "count"=0, "perc"=0) %>% 
-#   mutate(day = factor(day, levels = c("apheresis", "-5d", "30d", "60d", "90d")))
-# b <- a %>% filter(grade == "Any grade")
-# a %>% filter(grade == "Grade 3+") %>% 
-#   ggplot(aes(x= day, 
-#              y= perc, 
-#              fill= name, alpha= 1
-#              ))+
-#   geom_bar(stat = "identity",
-#            position=position_dodge(width=0.9))+
-#   geom_bar(stat = "identity",
-#            position=position_dodge(width=0.9), data= b,
-#            aes(x= day, y= perc, fill= name), alpha= 0.4)+
-#   scale_fill_brewer(palette = "Spectral")+
-#   labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
-#   theme_classic()+
-#   scale_alpha_continuous(limits = c(0.4,1), breaks = c(0.4,1),
-#                          labels= c("Any Grade", "Grade 3+"))
+
+tbl3 <- cart0 %>%
+  mutate(overall_response = case_when(
+    !is.na(best_response)                 ~ "YES",
+    is.na(best_response)                  ~ "NO"
+  )) %>% 
+  mutate(months_at_best_response = case_when(
+    best_response == day30_response_group     ~ 1,
+    best_response == day90_response_group     ~ 3
+  )) %>% 
+  mutate(months_at_best_CRresponse = case_when(
+    str_detect(best_response, "CR") &
+      best_response == day30_response_group     ~ 1,
+    str_detect(best_response, "CR") &
+      best_response == day90_response_group     ~ 3
+  )) %>% 
+  
+  
+  select(overall_response,
+         best_response,
+         
+         months_at_best_response,
+         months_at_best_CRresponse,
+         
+         
+         ORR_30days,
+         day30_response,
+         day30_response_group) %>%
+  tbl_summary(#type = list(
+    # c(MRDneg_30days) ~ "categorical"),
+    digits = all_continuous() ~ 1,
+    missing = "no") %>%
+  bold_labels() %>% add_stat_label()
+
+# tbl4 <- cart0 %>%
+#   distinct(patient_id, .keep_all = TRUE) %>%
+#   filter(day30_response_group == "CR or sCR") %>%
+#   select(MRDneg_30days) %>%
+#   tbl_summary(type = list(c(MRDneg_30days) ~ "categorical"),
+#               label = list(MRDneg_30days ~ "MRDneg_30days within CR/sCR"),
+#               digits = all_continuous() ~ 1,
+#               missing = "no") %>%
+#   bold_labels() %>% add_stat_label()
+
+tbl5 <- cart0 %>%
+  distinct(patient_id, .keep_all = TRUE) %>%
+  select(#MRDneg_90days,
+         ORR_90days,
+         day90_response,
+         day90_response_group) %>%
+  tbl_summary(#type = list(
+    # c(MRDneg_90days) ~ "categorical"),
+    digits = all_continuous() ~ 1,
+    missing = "no") %>%
+  bold_labels() %>% add_stat_label()
+
+# tbl6 <- cart0 %>%
+#   distinct(patient_id, .keep_all = TRUE) %>%
+#   filter(day90_response_group == "CR or sCR") %>%
+#   select(MRDneg_90days) %>%
+#   tbl_summary(type = list(c(MRDneg_90days) ~ "categorical"),
+#               label = list(MRDneg_90days ~ "MRDneg_90days within CR/sCR"),
+#               digits = all_continuous() ~ 1,
+#               missing = "no") %>%
+#   bold_labels() %>% add_stat_label()
+
+tbl7 <- cart0 %>%
+  distinct(patient_id, .keep_all = TRUE) %>%
+  select(best_response) %>%
+  tbl_summary(#type = list(c(MRDneg_90days) ~ "categorical"),
+              label = list(best_response ~ "best response in the first 90 days"),
+              digits = all_continuous() ~ 1,
+              missing = "no") %>%
+  bold_labels() %>% add_stat_label()
+
+tbl8 <- cart0 %>%
+  distinct(patient_id, .keep_all = TRUE) %>%
+  filter(best_response == "CR or sCR") %>%
+  select(MRDneg_in_best_response) %>%
+  tbl_summary(type = list(c(MRDneg_in_best_response) ~ "categorical"),
+              label = list(MRDneg_in_best_response ~ "MRDneg_in_best_response within CR/sCR"),
+              statistic=list(all_continuous() ~ "{median} ({min}, {max})"),
+              digits = all_continuous() ~ 1,
+              missing = "no") %>%
+  bold_labels() %>% add_stat_label()
+
+
+
+tbl_stack(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8)) %>% as_gt() %>%
+  gt::tab_source_note(gt::md("**
+                             **"))
+
 ```
- 
 
 
 
