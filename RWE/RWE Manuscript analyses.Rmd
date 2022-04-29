@@ -137,14 +137,6 @@ cart0 <- MM_cart %>%
     Sex == "M"                                                    ~ 1,
     TRUE                                                          ~ 0
   )) %>% 
-  mutate_at(c("ECOG at consult",
-              "ECOG at LD"
-              ), 
-            ~ case_when(
-              . == 1                                              ~ "YES",
-              . == 0                                              ~ "NO",
-              TRUE                                                ~ NA_character_
-            )) %>% 
   # ECOG
   # mutate(`ECOG at LD` = case_when(
   #   `ECOG at LD` == 0 | 
