@@ -63,7 +63,6 @@ MM_cart <-
   rename(patient_id = `PT Identifier (DO NOT USE PHI)`)
 ```
 
-`r emo::ji("question_mark")` **Exclusion criteria**
 
 
 ```{r data cleaning}
@@ -86,6 +85,9 @@ cart0 <- MM_cart %>%
          date_of_apheresis = coalesce(date_of_apheresis, first_date_of_apheresis)
          ) %>% 
   select(-c(`Date of Apheresis (or # of days from apheresis to LD)`, first_date_of_apheresis)) %>% 
+  
+  
+  
   mutate(across(c(`Day of Max CRS (relative to infusion)`,
                   `Day of Max ICANS (relative to infusion)`), ~ str_remove(., "Day +"))
          ) %>% 
@@ -222,7 +224,7 @@ cart0 <- MM_cart %>%
   )) %>% 
   
   mutate(exclusion_criteria =  
-           rowSums(select(.,`Received investigation agent, plasmapheresis, surgery, radiation, or therapy within 14 days of apheresis (Yes, No)`:`Other BCMA trial`
+           rowSums(select(.,`Received investigation agent, plasmapheresis, surgery, radiation, or therapy within 14 days of apheresis (Yes, No)`:`ECOG > or = 2? (Yes, No)`
                           ) == "YES", na.rm = TRUE),
          exclusion_criteria = case_when(
            exclusion_criteria == 0           ~ "0",
@@ -950,7 +952,7 @@ cart0 <- MM_cart %>%
   mutate(pfs_time = coalesce(`Date of PD`, `Date of Death`, `Date of Last Contact`)) %>% 
   mutate(days_at_pfs_from_infusion = 
            interval(
-             start = `Date of CAR T infusion (# of days from apharesis to infusion)`, 
+             start = date_of_apheresis, 
              end = pfs_time)/
            duration(n=1, units = "months")) %>% 
   
@@ -962,7 +964,7 @@ cart0 <- MM_cart %>%
   mutate(os_time = coalesce(`Date of Death`, `Date of Last Contact`)) %>% 
   mutate(days_at_os_from_infusion = 
            interval(
-             start = `Date of CAR T infusion (# of days from apharesis to infusion)`, 
+             start = date_of_apheresis, 
              end = os_time)/
            duration(n=1, units = "months"))
   
@@ -2003,7 +2005,7 @@ cart0 %>%
 Panel B: PFS Kaplan Meier (from CAR-T infusion)
 
 ```{r, fig.width= 6, fig.height=6}
-ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
+myplot <- ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
                    data = cart0),
            title = "PFS from date of infusion", 
            font.main = c(24, "bold", "black"), 
@@ -2026,6 +2028,11 @@ ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1,
            
            legend.title = "", xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 2))
+myplot$plot <- myplot$plot + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot$table <- myplot$table + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot
 
 survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
                    data = cart0)
@@ -2033,7 +2040,7 @@ survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1,
 
 Panel C: OS Kaplan Meier (from CAR-T infusion)
 ```{r, fig.width= 6, fig.height=6}
-ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ 1, 
+myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ 1, 
                    data = cart0),
            title = "OS from date of infusion", 
            font.main = c(24, "bold", "black"), 
@@ -2056,6 +2063,11 @@ ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ 1,
            
            legend.title = "", xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 2))
+myplot$plot <- myplot$plot + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot$table <- myplot$table + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot
 
 survfit(Surv(days_at_os_from_infusion, os_event) ~ 1, 
                    data = cart0)
@@ -2163,7 +2175,7 @@ cart0 <- cart0 %>%
 ```
 
 ```{r, fig.width= 6, fig.height=6}
-ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
+myplot <- ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0),
            title = "PFS from date of infusion", 
            font.main = c(24, "bold", "black"), 
@@ -2186,6 +2198,11 @@ ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_
            
            legend.title = "", xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 1))
+myplot$plot <- myplot$plot + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot$table <- myplot$table + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot
 
 survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0)
@@ -2193,7 +2210,7 @@ survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_fo
 
 Panel C: OS Kaplan Meier (from CAR-T infusion)
 ```{r, fig.width= 6, fig.height=6}
-ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
+myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0),
            title = "OS from date of infusion", 
            font.main = c(24, "bold", "black"), 
@@ -2216,6 +2233,11 @@ ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_cr
            
            legend.title = "", xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 1))
+myplot$plot <- myplot$plot + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot$table <- myplot$table + 
+  scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
+myplot
 
 survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0)
