@@ -67,9 +67,6 @@ MM_cart <-
 
 ```{r data cleaning}
 cart0 <- MM_cart %>% 
-  # Exclude patients who had manufacturing cart failure or died prior cart infusion
-  filter(is.na(exclude_for_manufacturing_cart_failure_or_died_prior_cart_infusion)) %>% 
-
   mutate(across(c(`ANC Day 30`,
                   `ANC Day 90`,
                   `HgB Day 90`,
@@ -140,11 +137,12 @@ cart0 <- MM_cart %>%
     TRUE                                                          ~ 0
   )) %>% 
   # ECOG
-  # mutate(`ECOG at LD` = case_when(
-  #   `ECOG at LD` == 0 | 
-  #     `ECOG at LD` == 1                       ~ "0-1",
-  #   TRUE                                                          ~ `ECOG at LD`
-  # )) %>% 
+  mutate(`ECOG at LD` = case_when(
+    `ECOG at LD` == 0 |
+      `ECOG at LD` == 1                                           ~ "0-1",
+    `ECOG at LD` %in% c(2:4)                                      ~ "2-4",
+    TRUE                                                          ~ NA_character_
+  )) %>% 
   # cytogenetics
   mutate(cytogenetics = case_when(
     `Deletion 17p prior to CAR-T infusion (yes, no)` == "YES" | 
@@ -156,58 +154,52 @@ cart0 <- MM_cart %>%
     TRUE                                                      ~ NA_character_
   )) %>% 
   # refractory status
-  # mutate_at(c("Lenalidomide (exposed vs. refractory)",
-  #             "Bortezomib (exposed vs. refractory)",
-  #             "Carfilzomib (exposed vs. refractory)",
-  #             "Pomalidomide (exposed vs. refractory)",
-  #             "Daratumumab (exposed vs. refractory)"), 
-  #           ~ case_when(
-  #             . == 1                                              ~ "Refractory",
-  #             . == 0                                              ~ "Exposed",
-  #             TRUE                                                ~ NA_character_
-  #           )) %>% 
+  mutate_at(c("Lenalidomide (exposed vs. refractory)",
+              "Bortezomib (exposed vs. refractory)",
+              "Carfilzomib (exposed vs. refractory)",
+              "Pomalidomide (exposed vs. refractory)",
+              "Daratumumab (exposed vs. refractory)"),
+            ~ case_when(
+              is.na(.)                                            ~ "Not Refractory",
+              TRUE                                                ~ as.character(.)
+            )) %>%
   mutate(immuno = case_when(
-    `Lenalidomide (exposed vs. refractory)` == "Exposed" &
-      `Pomalidomide (exposed vs. refractory)` == "Exposed"        ~ "NO",
     `Lenalidomide (exposed vs. refractory)` == "Refractory" |
-      `Pomalidomide (exposed vs. refractory)` == "Refractory"     ~ "YES"
+      `Pomalidomide (exposed vs. refractory)` == "Refractory"     ~ "YES",
+    TRUE        ~ "NO"
   )) %>% 
   mutate(proteasome = case_when(
-    `Bortezomib (exposed vs. refractory)` == "Exposed" &
-      `Carfilzomib (exposed vs. refractory)` == "Exposed"      ~ "NO",
     `Bortezomib (exposed vs. refractory)` == "Refractory" |
-      `Carfilzomib (exposed vs. refractory)` == "Refractory"   ~ "YES"
+      `Carfilzomib (exposed vs. refractory)` == "Refractory"   ~ "YES",
+    TRUE      ~ "NO"
   )) %>% 
   mutate(dara = case_when(
     `Daratumumab (exposed vs. refractory)` == "Refractory"      ~ "YES",
-    `Daratumumab (exposed vs. refractory)` == "Exposed"             ~ "NO"
+    TRUE             ~ "NO"
   )) %>% 
   mutate(doubleref = case_when(
-    proteasome == "NO" | 
-      immuno == "NO"                                              ~ "NO",
     proteasome == "YES" &
-      immuno == "YES"                                         ~ "YES"
+      immuno == "YES"                                         ~ "YES",
+    TRUE                                              ~ "NO"
   )) %>% 
   mutate(tripleref = case_when(
-    proteasome == "NO" | 
-      immuno == "NO" |
-      `Daratumumab (exposed vs. refractory)` == "Exposed"      ~ "NO",
     proteasome == "YES" &
       immuno == "YES" &
-      `Daratumumab (exposed vs. refractory)` == "Refractory"        ~ "YES"
+      `Daratumumab (exposed vs. refractory)` == "Refractory"        ~ "YES",
+    TRUE      ~ "NO"
   )) %>% 
   mutate(pentaref = case_when(
-    `Bortezomib (exposed vs. refractory)` == "Exposed" | 
-      `Carfilzomib (exposed vs. refractory)` == "Exposed" |
-      `Lenalidomide (exposed vs. refractory)` == "Exposed" | 
-      `Pomalidomide (exposed vs. refractory)` == "Exposed" | 
-      `Daratumumab (exposed vs. refractory)` == "Exposed"     ~ "NO",
     `Bortezomib (exposed vs. refractory)` == "Refractory" & 
       `Carfilzomib (exposed vs. refractory)` == "Refractory" &
       `Lenalidomide (exposed vs. refractory)` == "Refractory" & 
       `Pomalidomide (exposed vs. refractory)` == "Refractory" & 
-      `Daratumumab (exposed vs. refractory)` == "Refractory"  ~ "YES"
+      `Daratumumab (exposed vs. refractory)` == "Refractory"  ~ "YES",
+    TRUE     ~ "NO"
   )) %>% 
+  mutate(number_prior_lines_therapy = case_when(
+    `Number of prior lines of therapy` <= 4           ~ "≤4",
+    `Number of prior lines of therapy` > 4            ~ ">4",
+  )) %>%
   mutate(`Tocilizumab (Yes, No)` = case_when(
     `Tocilizumab (Yes, No)` == "Siltuximab"                    ~ "YES",
       str_detect(`Tocilizumab (Yes, No)`, "COVID")             ~ "NO",
@@ -254,9 +246,9 @@ cart0 <- MM_cart %>%
            `Max CRS grade (0-5)` == 2                             ~ "Grade 1 or 2",
            `Max CRS grade (0-5)` >= 3                             ~ "Grade ≥3"),
          CRS_gradecat = factor(CRS_gradecat, levels = c("No CRS", "Grade 1 or 2", "Grade ≥3")),
-         gr3_CRS = case_when(
-           CRS_gradecat == "Grade ≥3"                             ~ "Grade ≥3",
-           CRS_gradecat != "Grade ≥3"                             ~ "Grade <3",
+         gr2_CRS = case_when(
+           `Max CRS grade (0-5)` %in% c(0:1)                      ~ "Grade <2",
+           `Max CRS grade (0-5)` %in% c(2:3)                      ~ "Grade ≥2",
            TRUE                                                   ~ NA_character_
            )) %>% 
   # mutate( = case_when(
@@ -272,40 +264,12 @@ cart0 <- MM_cart %>%
            `Max ICANS (relative to infusion)` == 2 ~              "Grade 1 or 2",
            `Max ICANS (relative to infusion)` >= 3 ~              "Grade ≥3"),
          ICANS_gradecat = factor(ICANS_gradecat, levels = c("No ICANS", "Grade 1 or 2", "Grade ≥3")),
-         gr3_ICANS = case_when(
-           ICANS_gradecat == "Grade ≥3"                             ~ "Grade ≥3",
-           ICANS_gradecat != "Grade ≥3"                             ~ "Grade <3",
+         gr2_ICANS = case_when(
+           `Max ICANS (relative to infusion)` %in% c(0:1)         ~ "Grade <2",
+           `Max ICANS (relative to infusion)` %in% c(2:3)         ~ "Grade ≥2",
            TRUE                                                   ~ NA_character_
          )) %>% 
-  # mutate(`marrow cellularity baseline` = case_when(
-  #   `marrow cellularity baseline` == "\"patchy\""                 ~ "hyper",
-  #   TRUE                                                          ~ `marrow cellularity baseline`
-  # )) %>% 
-  # mutate(`marrow cellularity day +30` = case_when(
-  #   `marrow cellularity day +30` == "aplastic"                    ~ "hypo",
-  #   TRUE                                                          ~ `marrow cellularity day +30`
-  # )) %>% 
-  # mutate(`Access type` = case_when(
-  #   `Access type` == "Femoral"                                    ~ "Non-tunneled",
-  #   `Access type` == "AVF"                                        ~ "Peripheral",
-  #   TRUE                                                          ~ `Access type`
-  # )) %>% 
-  # mutate(best_response = ) %>% 
-  # mutate(Neutropenia_apheresis = case_when(
-  #   `ANC apheresis` < 1.8                                           ~ "YES",
-  #   is.na(`ANC apheresis`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Neutropenia_-5d` = case_when(
-  #   `ANC day -5 (k/ul)` < 1.8                                        ~ "YES",
-  #   is.na(`ANC day -5 (k/ul)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
-  # mutate(`Neutropenia_0d` = case_when(
-  #   `ANC day 0 (k/uL)` < 1.8                                        ~ "YES",
-  #   is.na(`ANC day 0 (k/uL)`)                                          ~ NA_character_,
-  #   TRUE                                                          ~ "NO"
-  # )) %>% 
+  
   mutate(`Neutropenia_7d` = case_when(
     `ANC Day 7` < 1.8                                              ~ "YES",
     is.na(`ANC Day 7`)                                          ~ NA_character_,
@@ -856,6 +820,13 @@ cart0 <- MM_cart %>%
     is.na(`Day 30 Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
     TRUE           ~ `Day 30 Response (sCR, CR, VGPR, PR)`
   )) %>% 
+  mutate(day30_response_group1 = case_when(
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
+    str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR")          ~ "CR or sCR",
+    is.na(`Day 30 Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
+    TRUE           ~ `Day 30 Response (sCR, CR, VGPR, PR)`
+  )) %>% 
   mutate(day30_response_sCRvsOthers = case_when(
     str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "CR")	         ~ "CR or sCR",
     is.na(`Day 30 Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
@@ -887,6 +858,13 @@ cart0 <- MM_cart %>%
       str_detect(`3 Month MRD (positive vs negative)`, "MRD+")        ~ "CR or sCR, MRD+",
     str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR") &
       is.na(`3 Month MRD (positive vs negative)`)                     ~ "CR or sCR, MRD unknown",
+    is.na(`3 Month Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
+    TRUE           ~ `3 Month Response (sCR, CR, VGPR, PR)`
+  )) %>% 
+  mutate(day90_response_group1 = case_when(
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "VGPR")        ~ "VGPR",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "PR")          ~ "PR",
+    str_detect(`3 Month Response (sCR, CR, VGPR, PR)`, "CR")          ~ "CR or sCR",
     is.na(`3 Month Response (sCR, CR, VGPR, PR)`)                     ~ NA_character_,
     TRUE           ~ `3 Month Response (sCR, CR, VGPR, PR)`
   )) %>% 
@@ -942,13 +920,24 @@ cart0 <- MM_cart %>%
   #   str_detect(`Day 30 Response (sCR, CR, VGPR, PR)`, "MRD")         ~ "No",
   #   TRUE                             ~ NA_character_
   # )) %>% 
+  # Median follow up
+  mutate(time_leukapheresis_fup = 
+           interval(
+             start = date_of_apheresis, 
+             end = `Date of Last Contact`)/
+           duration(n=1, units = "days")) %>%
+  # Median time from leukapheresis to infusion 
+  mutate(time_leukapheresis_infusion = 
+           interval(
+             start = date_of_apheresis, 
+             end = `Date of CAR T infusion (# of days from apharesis to infusion)`)/
+           duration(n=1, units = "days")) %>%
+  # Code survival
   mutate(pfs_event = case_when(
     is.na(`Date of PD`)                                ~ 0,
     !is.na(`Date of PD`)                               ~ 1,
     TRUE                                               ~ NA_real_
   )) %>% 
-  
-  # Code survival
   mutate(pfs_time = coalesce(`Date of PD`, `Date of Death`, `Date of Last Contact`)) %>% 
   mutate(days_at_pfs_from_infusion = 
            interval(
@@ -1078,9 +1067,7 @@ cart0 <- MM_cart %>%
 # 
 # 
 # 
-# # dose reduction
-# cart$`Fludarabine Dose Reduction`[cart$`Fludarabine Dose Reduction` == "YES (HD)"] <- "YES"
-# table(cart$`Fludarabine Dose Reduction`)
+
 # 
 # # RSS
 # table(cart$`R-ISS at CAR-T infusion`)
@@ -1128,17 +1115,17 @@ var_label(cart0) <- list(Age = "Patient Age", agecat = "Patient Age - Categories
 
 ## Table X. Manufacturing failures
 ```{r}
-MM_cart %>% 
+MM_cart %>%
   # Exclude patients who had manufacturing cart failure or died prior cart infusion
-  select(`First manufacturing failure`, 
-         `Manufaturing failures with successfull second collection`) %>% 
-  mutate(across(everything(), ~ replace_na(., 0))) %>% 
+  select(`First manufacturing failure`,
+         `Manufaturing failures with successfull second collection`) %>%
+  mutate(across(everything(), ~ replace_na(., 0))) %>%
   tbl_summary(
-    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"),
     digits = all_continuous() ~ 1,
     missing = "no"
-  ) %>% 
-  bold_labels() %>% add_stat_label() %>% 
+  ) %>%
+  bold_labels() %>% add_stat_label() %>%
   modify_footnote(update = everything() ~ NA)
 ```
 <br>
@@ -1161,6 +1148,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Disease status at time of referral (Relapsed vs Refractory)`,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
@@ -1168,8 +1156,7 @@ cart0 %>%
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
          Blenrep,`BCMA CAR-T on trial`, `Other BCMA trial`,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
-         
-         `Cell Dose (million cells)`,
+         `Cell Dose (million cells)`, cart_cell_dose,
          exclusion_criteria,
          
          `ECOG > or = 2? (Yes, No)`,
@@ -1183,7 +1170,8 @@ cart0 %>%
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
          comorbidities,
 
-         `Did patient met criteria for KarMMa1 pre-CAR-T?`) %>% 
+         `Did patient met criteria for KarMMa1 pre-CAR-T?`,
+         time_leukapheresis_infusion, time_leukapheresis_fup) %>% 
   tbl_summary(
     type = list(
       c(
@@ -1221,6 +1209,16 @@ cart0 %>%
   modify_footnote(update = everything() ~ NA)
 ```
 
+## From here, we excluded 38 patients
+```{r}
+cart0 %>% 
+  filter(!is.na(exclude_for_manufacturing_cart_failure_or_died_prior_cart_infusion)) %>% 
+  select(`Patients excluded` = patient_id)
+
+cart0 <- cart0 %>% 
+  # Exclude patients who had manufacturing cart failure or died prior cart infusion
+  filter(is.na(exclude_for_manufacturing_cart_failure_or_died_prior_cart_infusion))
+```
 
 ## Table 2. Safety with Standard of Care Idecabtagene Vicleucel Event and Grade
 
@@ -1274,7 +1272,75 @@ cart0 %>%
   modify_footnote(update = everything() ~ NA)
 ```
 
-## Table 3.Characteristics associated with grade ≥ 3 CRS, grade ≥ 3 neurotoxicity, grade ≥ 3 cytopenias ≥ 30 days, best response of ≥ CR at 3 months, best ORR 
+## Table 3.Responses
+```{r}
+cart0 %>% 
+  select(day30_response, 
+         day30_response_group, day30_response_sCRvsOthers, 
+         day90_response, 
+         day90_response_group, day90_response_sCRvsOthers) %>% 
+  tbl_summary(missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% 
+  modify_footnote(update = everything() ~ NA)
+```
+
+left is day 30, top is day 90 - **restricted to patients who have a 30 day AND a 90 day response.**
+```{r}
+table(cart0$day30_response_sCRvsOthers, cart0$day90_response_sCRvsOthers)
+
+table(cart0$day30_response, cart0$day90_response)
+```
+
+```{r}
+cart0 %>% 
+  select(day90_response_group1, 
+         CRS_any) %>% 
+  tbl_summary(by= CRS_any,
+              missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% 
+  modify_footnote(update = everything() ~ NA) %>% 
+  modify_spanning_header(all_stat_cols() ~ "**Any CRS**")
+```
+
+Of the total 141 patients with a response, how many were MRD neg (N and %).
+```{r}
+cart0 %>% 
+  mutate(has_response = case_when(
+    !is.na(best_response)     ~ "Patient with responses"
+  )) %>% 
+  select(has_response, 
+         `Day 30 MRD (positive vs negative)`) %>% 
+  tbl_summary(by= has_response,
+              missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_footnote(update = everything() ~ NA)
+
+cart0 %>% 
+  mutate(has_response = case_when(
+    !is.na(best_response)     ~ "Patient with responses"
+  )) %>% 
+  select(has_response, 
+         `3 Month MRD (positive vs negative)`) %>% 
+  tbl_summary(by= has_response,
+              missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_footnote(update = everything() ~ NA)
+
+cart0 %>% 
+  mutate(has_response = case_when(
+    !is.na(best_response)     ~ "Patient with responses"
+  )) %>% 
+  select(has_response, 
+         best_MRD_response) %>% 
+  tbl_summary(by= has_response,
+              missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_footnote(update = everything() ~ NA)
+```
+
+
+
+## Table 4.Characteristics associated with grade ≥ 3 CRS, grade ≥ 3 neurotoxicity, grade ≥ 3 cytopenias ≥ 30 days, best response of ≥ CR at 3 months, best ORR 
 ```{r}
 cart0 %>% 
   select(Age, agecat, male_sex, Sex,
@@ -1293,6 +1359,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
@@ -1313,9 +1380,9 @@ cart0 %>%
          `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
          `Non-secretory MM (Yes, No)`,
          `Did patient met criteria for KarMMa1 pre-CAR-T?`,
-         gr3_CRS
+         gr2_CRS
   ) %>% 
-  tbl_summary(by = gr3_CRS,
+  tbl_summary(by = gr2_CRS,
               type = list(
                 c(
                   `Extramedullary Disease? (Yes, No)`, 
@@ -1356,7 +1423,7 @@ cart0 %>%
   bold_labels() %>% add_stat_label() %>% 
   add_p() %>% 
   modify_footnote(update = everything() ~ NA) %>%
-  modify_spanning_header(all_stat_cols() ~ "**Grade 3 CRS**")
+  modify_spanning_header(all_stat_cols() ~ "**Grade 2 CRS**")
 ```
 
 ```{r}
@@ -1377,6 +1444,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
@@ -1397,9 +1465,9 @@ cart0 %>%
          `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
          `Non-secretory MM (Yes, No)`,
          `Did patient met criteria for KarMMa1 pre-CAR-T?`,
-         gr3_ICANS
+         gr2_ICANS
   ) %>% 
-  tbl_summary(by = gr3_ICANS,
+  tbl_summary(by = gr2_ICANS,
               type = list(
                 c(
                   `Extramedullary Disease? (Yes, No)`, 
@@ -1440,7 +1508,7 @@ cart0 %>%
   bold_labels() %>% add_stat_label() %>% 
   add_p() %>% 
   modify_footnote(update = everything() ~ NA) %>%
-  modify_spanning_header(all_stat_cols() ~ "**Grade 3 ICANS**")
+  modify_spanning_header(all_stat_cols() ~ "**Grade 2 ICANS**")
 ```
 
 ```{r}
@@ -1461,6 +1529,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
@@ -1545,6 +1614,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
@@ -1629,6 +1699,7 @@ cart0 %>%
          `t(14:16) prior to CAR-T infusion (yes, no)`,
          `Bridging Therapy? (Yes, No)`,
          `Number of prior lines of therapy`,
+         number_prior_lines_therapy,
          `Prior auto SCT (yes, no)`, 
          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
          `Prior Allo SCT (Yes, No)`,
@@ -1695,12 +1766,147 @@ cart0 %>%
   modify_spanning_header(all_stat_cols() ~ "**ORR_90days**")
 ```
 
+```{r}
+# cart0 %>% 
+#   select(Age, agecat, male_sex, Sex,
+#          `Extramedullary Disease? (Yes, No)`, 
+#          `Disease status at time of referral (Relapsed vs Refractory)`,
+#          `Plasma Cell Leukemia? (yes, no)`,
+#          `Amyloid? (yes, no)`,
+#          POEMS,
+#          `Non-secretory MM (Yes, No)`, ################??????????
+#          `High Marrow Burden (>= 50%)`, 
+#          `ECOG at consult`, `ECOG at LD`, 
+#          `R-ISS at CAR-T infusion`, 
+#          cytogenetics,
+#          `Deletion 17p prior to CAR-T infusion (yes, no)`,
+#          `t(4:14) prior to CAR-T infusion (yes, no)`,
+#          `t(14:16) prior to CAR-T infusion (yes, no)`,
+#          `Bridging Therapy? (Yes, No)`,
+#          `Number of prior lines of therapy`,
+#          `Prior auto SCT (yes, no)`, 
+#          `ASCT within 12 weeks prior to apheresis (Yes, No)`,
+#          `Prior Allo SCT (Yes, No)`,
+#          Blenrep,
+#          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
+#          `BCMA CAR-T on trial`, `Other BCMA trial`,
+#          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+#          cart_cell_dose,
+#          `Infection (Yes, No)`,
+#          `Tocilizumab (Yes, No)`, `Steroid use (Yes, No)`, `Anakinra (Yes, No)`,
+#          baseline_ferritin, baseline_crp, baseline_B2M,
+#          `ECOG > or = 2? (Yes, No)`,
+#          `Renal insufficiency CrCl < 45 mL/min (Yes, No)`,
+#          `LVEF <45% (Yes, No)`,
+#          `ANC < 1000/uL (Yes, No)`,
+#          `Hemoglobin < 8 g/dL (Yes, No)`,
+#          `Platelets < 50K (Yes, No)`, 
+#          `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
+#          `Non-secretory MM (Yes, No)`,
+#          `Did patient met criteria for KarMMa1 pre-CAR-T?`,
+#          `Number of prior lines of therapy`
+#   ) %>% 
+#   mutate(`Number of prior lines of therapy` = case_when(
+#     `Number of prior lines of therapy` <= 4           ~ "≤4",
+#     `Number of prior lines of therapy` > 4            ~ ">4",
+#   )) %>% 
+#   tbl_summary(by = `Number of prior lines of therapy`,
+#               type = list(
+#                 c(
+#                   `Extramedullary Disease? (Yes, No)`, 
+#                   `Plasma Cell Leukemia? (yes, no)`,
+#                   `Amyloid? (yes, no)`,
+#                   POEMS,
+#                   `Non-secretory MM (Yes, No)`,
+#                   `High Marrow Burden (>= 50%)`,
+#                   `ECOG at consult`, `ECOG at LD`,
+#                   cytogenetics,
+#                   `Deletion 17p prior to CAR-T infusion (yes, no)`,
+#                   `t(4:14) prior to CAR-T infusion (yes, no)`,
+#                   `t(14:16) prior to CAR-T infusion (yes, no)`,
+#                   `Bridging Therapy? (Yes, No)`, `Prior auto SCT (yes, no)`,
+#                   `ASCT within 12 weeks prior to apheresis (Yes, No)`,
+#                   `Prior Allo SCT (Yes, No)`,
+#                   Blenrep,
+#                   `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`,
+#                   `BCMA CAR-T on trial`, `Other BCMA trial`,
+#                   immuno, proteasome, dara, doubleref, tripleref, pentaref,
+#                   `Infection (Yes, No)`,
+#                   `Tocilizumab (Yes, No)`, `Steroid use (Yes, No)`, `Anakinra (Yes, No)`,
+#                   `ECOG > or = 2? (Yes, No)`,
+#                   `Renal insufficiency CrCl < 45 mL/min (Yes, No)`,
+#                   `LVEF <45% (Yes, No)`,
+#                   `ANC < 1000/uL (Yes, No)`,
+#                   `Hemoglobin < 8 g/dL (Yes, No)`,
+#                   `Platelets < 50K (Yes, No)`, 
+#                   `H/O or presence of Plasma cell leukemia, Waldenstrom's, POEMS, or amyloidosis (Yes, No)`,
+#                   `Non-secretory MM (Yes, No)`,
+#                   
+#                   `Did patient met criteria for KarMMa1 pre-CAR-T?`
+#                 )
+#                 ~"categorical"),
+#               statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+#               digits = all_continuous() ~ 1
+#   ) %>% 
+#   bold_labels() %>% add_stat_label() %>% 
+#   add_p() %>% 
+#   modify_footnote(update = everything() ~ NA) %>%
+#   modify_spanning_header(all_stat_cols() ~ "**Line of therapy**")
+```
+
 ## Table 4.Characteristics associated with grade ≥ 3 CRS, grade ≥ 3 neurotoxicity, grade ≥ 3 cytopenias ≥ 30 days, best response of ≥ CR at 3 months, best ORR in Multivariable Models of Idecabtagene vicleucel-treated patients. 
 ```{r}
+cart1 <- cart0 %>% 
+  mutate(day90_response_sCRvsOthers = case_when(
+    day90_response_sCRvsOthers == "Others"       ~ 0,
+    day90_response_sCRvsOthers == "CR or sCR"    ~ 1
+  ), 
+  day90_response_sCRvsOthers = factor(day90_response_sCRvsOthers)) %>% 
+  mutate(ORR_90days = case_when(
+    ORR_90days == "PD/SD/MR"    ~ 0,
+    ORR_90days == "ORR"         ~ 1
+  ), 
+  ORR_90days = factor(ORR_90days))
+```
 
+### CR or better
+```{r}
+glm(day90_response_sCRvsOthers ~ `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)` + cytogenetics + `Extramedullary Disease? (Yes, No)` + cart_cell_dose +
+        `ECOG at LD` + pentaref + number_prior_lines_therapy + Age,
+                data = cart1,
+    family = "binomial"(link='logit')) %>%
+            tbl_regression(exponentiate = TRUE) %>%
+            modify_spanning_header(everything() ~ "CR or sCR at 90 days vs Others")
+```
+
+### best ORR
+```{r}
+# clogit(ORR_90days ~ `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)` + cytogenetics + `Extramedullary Disease? (Yes, No)` + `Cell Dose (million cells)` +
+#         `ECOG at LD` + pentaref + Age,
+#                 data = cart1) #%>%
+            # tbl_regression(exponentiate = TRUE) %>%
+            # modify_spanning_header(everything() ~ "ORR at 90 days vs PD/SD/MR")
 ```
 
 
+```{r}
+glm(ORR_90days ~ `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)` + cytogenetics + `Extramedullary Disease? (Yes, No)` + cart_cell_dose +
+        `ECOG at LD` + pentaref + number_prior_lines_therapy + Age,
+                data = cart1,
+    family = "binomial") %>%
+            tbl_regression(exponentiate = TRUE) %>%
+            modify_spanning_header(everything() ~ "ORR at 90 days vs PD/SD/MR")
+```
+
+### PFS
+```{r}
+coxph(Surv(time = cart0$days_at_pfs_from_infusion,
+           event = cart0$pfs_event) ~ `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)` + cytogenetics + `Extramedullary Disease? (Yes, No)` + cart_cell_dose +
+        `ECOG at LD` + pentaref + number_prior_lines_therapy + Age,
+      data =  cart0) %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>% add_nevent(location = "level") %>% add_n(location = "level")
+```
 
 ```{r}
 # tbl1 <- cart0 %>% 
@@ -1994,9 +2200,40 @@ cart0 %>%
   mutate(percent=(count/sum(count)*100)
   ) %>% 
   filter(str_detect(value, "CR") | str_detect(value, "PR")) %>% 
+  mutate(name = factor(name, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  group_by(name) %>% 
+  mutate(n = sum(count)) %>% 
+  ungroup() %>% 
+  mutate(name =  paste0(name,'\nN = ',n)) %>% 
   ggplot(aes(x= name, y= percent, fill= value))+
-  geom_bar(stat = "identity")+
-  scale_fill_brewer(palette = "Blues")+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+  geom_text(aes(label = paste0("n=", count)), size = 3, position = position_stack(vjust = 0.5))+
+  ylim(0,100)+
+  labs(x= NULL)+
+  theme_classic()
+
+cart0 %>% 
+  select(day30_response_group, day90_response_group, best_response) %>% 
+  pivot_longer(cols = everything()) %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = factor(value, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>% 
+  group_by(name, value) %>% 
+  summarise(count=n()) %>% 
+  mutate(percent=(count/sum(count)*100)
+  ) %>% 
+  filter(str_detect(value, "CR") | str_detect(value, "PR")) %>% 
+  mutate(name = factor(name, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  group_by(name) %>% 
+  mutate(n = sum(count)) %>% 
+  ungroup() %>% 
+  mutate(name =  paste0(name,'\nN = ',n)) %>% 
+  ggplot(aes(x= name, y= percent, fill= value))+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
   ylim(0,100)+
   labs(x= NULL)+
   theme_classic()
@@ -2004,29 +2241,22 @@ cart0 %>%
 
 Panel B: PFS Kaplan Meier (from CAR-T infusion)
 
-```{r, fig.width= 6, fig.height=6}
-myplot <- ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
+```{r, fig.width= 6, fig.height=4}
+myplot <-
+  ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
                    data = cart0),
            title = "PFS from date of infusion", 
            font.main = c(24, "bold", "black"), 
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
-           font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
+           legend = "none",
+           font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
-           # legend.labs=c(""),
-           # palette = c("black", "green","blue", "red"), 
-           # Add risk table
-           risk.table = "abs_pct", risk.table.title = "Risk table (number(%))",
-           risk.table.y.text = FALSE, risk.table.fontsize = 3, tables.height = 0.3,
-           tables.theme = theme_survminer(base_size = 5,
-                                          font.main = c(16, "bold", "black"),
-                                          font.x = c(16, "bold", "black"),
-                                          font.y = c(16, "bold", "transparent"),
-                                          font.tickslab = c(19, "bold", "black")
-           ),
+           risk.table = FALSE,
            
-           legend.title = "", xlab = "Time (in months)" 
+           ylab = "PFS probability",
+           xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 2))
 myplot$plot <- myplot$plot + 
   scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
@@ -2039,29 +2269,21 @@ survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1,
 ```
 
 Panel C: OS Kaplan Meier (from CAR-T infusion)
-```{r, fig.width= 6, fig.height=6}
+```{r, fig.width= 6, fig.height=4}
 myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ 1, 
                    data = cart0),
            title = "OS from date of infusion", 
            font.main = c(24, "bold", "black"), 
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
-           font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
+           legend = "none",
+           font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
            
            pval=TRUE, 
-           # legend.labs=c(""),
-           # palette = c("black", "green","blue", "red"), 
-           # Add risk table
-           risk.table = "abs_pct", risk.table.title = "Risk table (number(%))",
-           risk.table.y.text = FALSE, risk.table.fontsize = 3, tables.height = 0.3,
-           tables.theme = theme_survminer(base_size = 5,
-                                          font.main = c(16, "bold", "black"),
-                                          font.x = c(16, "bold", "black"),
-                                          font.y = c(16, "bold", "transparent"),
-                                          font.tickslab = c(19, "bold", "black")
-           ),
+           risk.table = FALSE,
            
-           legend.title = "", xlab = "Time (in months)" 
+           ylab = "OS probability",
+           xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 2))
 myplot$plot <- myplot$plot + 
   scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
@@ -2174,7 +2396,7 @@ cart0 <- cart0 %>%
   mutate(Overall = "Overall")
 ```
 
-```{r, fig.width= 6, fig.height=6}
+```{r, fig.width= 6, fig.height=4}
 myplot <- ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0),
            title = "PFS from date of infusion", 
@@ -2182,21 +2404,14 @@ myplot <- ggsurvplot(survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_pa
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
-           # Add risk table
-           risk.table = "abs_pct", risk.table.title = "Risk table (number(%))",
-           risk.table.y.text = FALSE, risk.table.fontsize = 3, tables.height = 0.3,
-           tables.theme = theme_survminer(base_size = 5,
-                                          font.main = c(16, "bold", "black"),
-                                          font.x = c(16, "bold", "black"),
-                                          font.y = c(16, "bold", "transparent"),
-                                          font.tickslab = c(19, "bold", "black")
-           ),
+           risk.table = FALSE,
            
-           legend.title = "", xlab = "Time (in months)" 
+           ylab = "PFS probability",
+           xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 1))
 myplot$plot <- myplot$plot + 
   scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
@@ -2209,7 +2424,7 @@ survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ Did_patient_met_criteria_fo
 ```
 
 Panel C: OS Kaplan Meier (from CAR-T infusion)
-```{r, fig.width= 6, fig.height=6}
+```{r, fig.width= 6, fig.height=4}
 myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_criteria_for_KarMMa1_pre_CAR_T, 
                    data = cart0),
            title = "OS from date of infusion", 
@@ -2221,17 +2436,10 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_pati
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
-           # Add risk table
-           risk.table = "abs_pct", risk.table.title = "Risk table (number(%))",
-           risk.table.y.text = FALSE, risk.table.fontsize = 3, tables.height = 0.3,
-           tables.theme = theme_survminer(base_size = 5,
-                                          font.main = c(16, "bold", "black"),
-                                          font.x = c(16, "bold", "black"),
-                                          font.y = c(16, "bold", "transparent"),
-                                          font.tickslab = c(19, "bold", "black")
-           ),
+           risk.table = FALSE,
            
-           legend.title = "", xlab = "Time (in months)" 
+           ylab = "OS probability",
+           xlab = "Time (in months)" 
 ) + guides(colour = guide_legend(ncol = 1))
 myplot$plot <- myplot$plot + 
   scale_x_continuous(breaks = c(0, 3, 6, 9, 12))
@@ -2248,17 +2456,34 @@ survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_patient_met_criteria_for_
 ```{r}
 cart0 %>%
   filter(!is.na(`Date of Death`)) %>% 
-  mutate(`Cause of death (myeloma, toxicitiy,other)` = case_when(
-    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "Myeloma")      ~ "Myeloma",
-    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "COVID")        ~ "COVID-19",
-    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "oxicity")      ~ "Toxicity",
-    TRUE                                     ~ `Cause of death (myeloma, toxicitiy,other)`
+  mutate(`Cardiomyopathy/Acute systolic heart failure (EF 15-25% post CAR-T) (unknown viral illness prior to CAR-T that improved pre-infusion)` = case_when(
+    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "Cardiomyopathy")      ~ "YES",
+    TRUE      ~ "NO"
   )) %>% 
-  select(`Cause of death (myeloma, toxicitiy,other)`) %>%
+  mutate(Myeloma = case_when(
+    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "Myeloma")      ~ "YES",
+    TRUE      ~ "NO"
+  )) %>% 
+  mutate(`COVID-19` = case_when(
+    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "COVID") &
+      !str_detect(`Cause of death (myeloma, toxicitiy,other)`, "Myeloma")    ~ "YES",
+    TRUE      ~ "NO"
+  )) %>% 
+  mutate(Toxicity = case_when(
+    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "oxicity")      ~ "YES",
+    TRUE      ~ "NO"
+  )) %>% 
+  mutate(HLH = case_when(
+    str_detect(`Cause of death (myeloma, toxicitiy,other)`, "HLH")      ~ "YES",
+    TRUE      ~ "NO"
+  )) %>% 
+  select(`Cardiomyopathy/Acute systolic heart failure (EF 15-25% post CAR-T) (unknown viral illness prior to CAR-T that improved pre-infusion)`, `COVID-19`, HLH, Myeloma, Toxicity) %>%
   tbl_summary() %>%
   bold_labels() %>% add_stat_label()
 ```
-
+1 patients had HLH and Toxicity “Toxicity - grade 5 CRS/HLH with superimposed infection”.  
+1 patient in Myeloma is "Myeloma (hypoxic resp failure with multiple lung masses, pleural fluid + PCs, strep due to cytopenias, COVID-19)".  
+1 patient is "And Myeloma, CNS".  
 
 ## Table 7. Multiple Myeloma Efficacy and Toxicity Outcomes following infusion of SOC Idecabtagene vicleucel or in KarMMa (Variables to report on ORR, ≥ CR rate, 3 month PFS rate, any CRS, grade ≥ 3 CRS, any neurotoxicity, grade ≥ 3 neurotoxicity (see lymphoma EXAMPLE table below)
 
@@ -2360,8 +2585,8 @@ tbl4 <- cart0 %>%
   cohort = factor(cohort, levels = c("Overall",
                                      "Met criteria for KarMMa1 pre-CAR-T",
                                      "NOT et criteria for KarMMa1 pre-CAR-T"))) %>% 
-  select(CRS_gradecat, cohort) %>%
-  tbl_summary(by= CRS_gradecat,
+  select(gr2_CRS, cohort) %>%
+  tbl_summary(by= gr2_CRS,
               # type = list(c(Did_patient_met_criteria_for_KarMMa1_pre_CAR_T) ~ "categorical"),
               statistic = all_categorical() ~ "{p}%",
               percent = "row") %>%
@@ -2400,8 +2625,8 @@ tbl6 <- cart0 %>%
   cohort = factor(cohort, levels = c("Overall",
                                      "Met criteria for KarMMa1 pre-CAR-T",
                                      "NOT et criteria for KarMMa1 pre-CAR-T"))) %>% 
-  select(ICANS_gradecat, cohort) %>%
-  tbl_summary(by= ICANS_gradecat,
+  select(gr2_ICANS, cohort) %>%
+  tbl_summary(by= gr2_ICANS,
               # type = list(c(Did_patient_met_criteria_for_KarMMa1_pre_CAR_T) ~ "categorical"),
               statistic = all_categorical() ~ "{p}%",
               percent = "row") %>%
@@ -2472,7 +2697,7 @@ tbl2 <- list(
     # survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ ICANS_gradecat, 
     #                data = cart0)
   ) %>%
-  tbl_survfit(times = c(3),
+  tbl_survfit(times = c(3, 6),
               label_header = "**PFS Rate at {time} Months**")
 
 tbl_merge(list(tbl1, tbl2))
