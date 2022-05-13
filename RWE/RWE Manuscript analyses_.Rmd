@@ -946,6 +946,11 @@ cart0 <- MM_cart %>%
              start = date_of_apheresis, 
              end = `Date of Last Contact`)/
            duration(n=1, units = "days")) %>%
+  mutate(time_infusion_fup = 
+           interval(
+             start = `Date of CAR T infusion (# of days from apharesis to infusion)`, 
+             end = `Date of Last Contact`)/
+           duration(n=1, units = "days")) %>%
   # Median time from leukapheresis to infusion 
   mutate(time_leukapheresis_infusion = 
            interval(
@@ -961,7 +966,7 @@ cart0 <- MM_cart %>%
   mutate(pfs_time = coalesce(`Date of PD`, `Date of Death`, `Date of Last Contact`)) %>% 
   mutate(days_at_pfs_from_infusion = 
            interval(
-             start = date_of_apheresis, 
+             start = `Date of CAR T infusion (# of days from apharesis to infusion)`, 
              end = pfs_time)/
            duration(n=1, units = "months")) %>% 
   
@@ -973,7 +978,7 @@ cart0 <- MM_cart %>%
   mutate(os_time = coalesce(`Date of Death`, `Date of Last Contact`)) %>% 
   mutate(days_at_os_from_infusion = 
            interval(
-             start = date_of_apheresis, 
+             start = `Date of CAR T infusion (# of days from apharesis to infusion)`, 
              end = os_time)/
            duration(n=1, units = "months"))
   
@@ -1126,8 +1131,10 @@ var_label(cart0) <- list(Age = "Patient Age", agecat = "Patient Age - Categories
                        dara="Refractory to Daratumumab", cytogenetics = "High-risk cytogenetics",
                        male_sex = "Male sex", number_prior_lines_therapy = "Number of prior lines of therapy (4 vs. >4)",
                        cart_cell_dose = "Cell dose (<400 vs. ≥400)", exclusion_criteria = "Number of KarMMa1 exclusion criteria",
-                       comorbidities = "Any comorbid conditions", time_leukapheresis_infusion = "Time from leukapheresis to infusion, days",
+                       comorbidities = "Any comorbid conditions", 
+                       time_leukapheresis_infusion = "Time from leukapheresis to infusion, days",
                        time_leukapheresis_fup = "Time from leukapheresis to end of follow-up, days", 
+                       time_infusion_fup = "Time from infusion to end of follow-up, days", 
                        best_ORRcollapsed = "Best ORR at ≤ 90 days", best_CRorbetter = "Best CR or better at ≤ 90 days") 
 
 ```
@@ -1196,7 +1203,8 @@ cart0 %>%
          comorbidities,
 
          `Did patient met criteria for KarMMa1 pre-CAR-T?`,
-         time_leukapheresis_infusion, time_leukapheresis_fup) %>% 
+         time_leukapheresis_infusion, time_infusion_fup,
+         time_leukapheresis_fup) %>% 
   tbl_summary(
     type = list(
       c(
@@ -2240,11 +2248,11 @@ cart0 %>%
   summarise(count=n()) %>% 
   mutate(percent=(count/sum(count)*100)
   ) %>% 
+  filter(str_detect(value, "CR") | str_detect(value, "PR")) %>% 
+  mutate(name = factor(name, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
   group_by(name) %>% 
   mutate(n = sum(count)) %>% 
   ungroup() %>% 
-  filter(str_detect(value, "CR") | str_detect(value, "PR")) %>% 
-  mutate(name = factor(name, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
   mutate(name =  paste0(name,'\nN = ',n)) %>% 
   ggplot(aes(x= name, y= percent, fill= value))+
   geom_bar(stat = "identity")+ 
@@ -2278,6 +2286,172 @@ cart0 %>%
   ylim(0,100)+
   labs(x= NULL)+
   theme_classic()
+
+
+cart0 %>% 
+  select(day30_response_group, day90_response_group, best_response, 
+         any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`) %>% 
+  pivot_longer(cols = -any_bcma, names_to = "response", values_to = "status") %>% 
+  filter(!is.na(status)) %>% 
+  mutate(status = factor(status, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>%
+  group_by(any_bcma, response, status) %>% 
+  summarise(count=n()) %>% 
+  mutate(percent=(count/sum(count)*100)
+  ) %>% 
+  # Count N 
+  group_by(response) %>% 
+  mutate(N = sum(count)) %>% 
+  ungroup() %>% 
+  filter(str_detect(status, "CR") | str_detect(status, "PR")) %>% 
+  mutate(response = factor(response, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  mutate(response =  paste0(response,'\nN = ',N)) %>% 
+  
+  ggplot(aes(x= any_bcma, y= percent, fill= status))+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+  geom_text(aes(label = paste0("n=", count)), size = 3, position = position_stack(vjust = 0.5))+
+  ylim(0,100)+
+  labs(x= NULL)+
+  theme_classic()+
+  facet_wrap(. ~ response)
+
+cart0 %>% 
+  select(day30_response_group, day90_response_group, best_response, 
+         any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`) %>% 
+  pivot_longer(cols = -any_bcma, names_to = "response", values_to = "status") %>% 
+  filter(!is.na(status)) %>% 
+  mutate(status = factor(status, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>%
+  group_by(any_bcma, response, status) %>% 
+  summarise(count=n()) %>% 
+  mutate(percent=(count/sum(count)*100)
+  ) %>% 
+  # Count N 
+  group_by(response) %>% 
+  mutate(N = sum(count)) %>% 
+  ungroup() %>% 
+  filter(str_detect(status, "CR") | str_detect(status, "PR")) %>% 
+  mutate(response = factor(response, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  mutate(response =  paste0(response,'\nN = ',N)) %>% 
+  
+  ggplot(aes(x= any_bcma, y= percent, fill= status))+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+  # geom_text(aes(label = paste0("n=", count)), size = 3, position = position_stack(vjust = 0.5))+
+  ylim(0,100)+
+  theme_classic()+
+  facet_wrap(. ~ response)
+
+cart0 %>% 
+  select(day30_response_group, day90_response_group, best_response, 
+         any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`) %>% 
+  pivot_longer(cols = -any_bcma, names_to = "response", values_to = "status") %>% 
+  filter(!is.na(status)) %>% 
+  mutate(status = factor(status, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>%
+  group_by(any_bcma, response, status) %>% 
+  summarise(count=n()) %>% 
+  mutate(percent=(count/sum(count)*100)
+  ) %>% 
+  # Count N 
+  group_by(response) %>% 
+  mutate(N = sum(count)) %>% 
+  ungroup() %>% 
+  filter(str_detect(status, "CR") | str_detect(status, "PR")) %>% 
+  mutate(response = factor(response, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  mutate(response =  paste0(response,'\nN = ',N)) %>% 
+  
+  ggplot(aes(x= (interaction(any_bcma, response)), y= percent, fill= status))+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+  geom_text(aes(label = paste0("n=", count)), size = 3, position = position_stack(vjust = 0.5))+
+  ylim(0,100)+
+  labs(x= NULL)+
+  theme_classic()
+
+cart0 %>% 
+  select(day30_response_group, day90_response_group, best_response, 
+         any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`) %>% 
+  pivot_longer(cols = -any_bcma, names_to = "response", values_to = "status") %>% 
+  filter(!is.na(status)) %>% 
+  mutate(status = factor(status, levels = c("CR or sCR, MRD-",
+                                        "CR or sCR, MRD+",
+                                        "CR or sCR, MRD unknown",
+                                        "VGPR", "PR", "Others"))) %>%
+  group_by(any_bcma, response, status) %>% 
+  summarise(count=n()) %>% 
+  mutate(percent=(count/sum(count)*100)
+  ) %>% 
+  # Count N 
+  group_by(response) %>% 
+  mutate(N = sum(count)) %>% 
+  ungroup() %>% 
+  filter(str_detect(status, "CR") | str_detect(status, "PR")) %>% 
+  mutate(response = factor(response, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+  mutate(response =  paste0(response,'\nN = ',N)) %>% 
+  
+  ggplot(aes(x= (interaction(any_bcma, response)), y= percent, fill= status))+
+  geom_bar(stat = "identity")+ 
+  scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+  ylim(0,100)+
+  theme_classic()
+
+# a <- cart0 %>% 
+#   select(day30_response_group, day90_response_group, best_response, 
+#          any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`) %>% 
+#   pivot_longer(cols = -any_bcma, names_to = "response", values_to = "status") %>% 
+#   filter(!is.na(status)) %>% 
+#   mutate(status = factor(status, levels = c("CR or sCR, MRD-",
+#                                         "CR or sCR, MRD+",
+#                                         "CR or sCR, MRD unknown",
+#                                         "VGPR", "PR", "Others"))) %>%
+#   group_by(any_bcma, response, status) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(percent=(count/sum(count)*100)
+#   ) %>% 
+#   # Count N 
+#   group_by(response) %>% 
+#   mutate(N = sum(count)) %>% 
+#   ungroup() %>% 
+#   filter(str_detect(status, "CR") | str_detect(status, "PR")) %>% 
+#   mutate(response = factor(response, levels = c("day30_response_group", "day90_response_group", "best_response"))) %>% 
+#   mutate(response =  paste0(response,'\nN = ',N))
+# 
+# b <- a %>% filter(any_bcma == "NO")
+# a %>% filter(any_bcma == "YES") %>% 
+#   ggplot(aes(x= name, y= percent, fill= value))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9)
+#            )+
+#   # geom_bar(stat = "identity",
+#   #          # position=position_dodge(width=0.9), 
+#   #          data= b,
+#   #          aes(x= name, y= percent, fill= value), alpha= 0.4)+
+#   scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+#   ylim(0,100)+
+#   labs(x= NULL)+
+#   theme_classic()
+# 
+# a %>% filter(any_bcma == "YES") %>% 
+#   ggplot(aes(x= name, y= percent, fill= value))+
+#   geom_col(stat = "identity",
+#            # position=position_dodge(width=0.9)
+#            )+
+#   geom_col(stat = "identity",
+#            # position=position_dodge(width=0.9),
+#            data= b,
+#            aes(x= name, y= percent, fill= value), alpha= 0.4)+
+#   scale_fill_manual(values = c("lightsteelblue2","steelblue2", "steelblue","thistle", "darkgray"))+
+#   ylim(0,100)+
+#   labs(x= NULL)+
+#   theme_classic()
 ```
 
 ### Panel B: PFS Kaplan Meier (from CAR-T infusion)
@@ -2326,6 +2500,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ 1,
            legend = "none",
            font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
+           xlim = c(0, 12),
            #pval=TRUE, 
            risk.table = TRUE,
            break.time.by = 3,
@@ -2378,13 +2553,14 @@ cart1 <- cart0 %>%
            interval(
              start = response_date,
              end = pfs_time)/
-           duration(n=1, units = "months"))
+           duration(n=1, units = "months")) %>% 
+  rename(any_bcma = `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)`)
 
 ggsurvplot(survfit(Surv(months_at_pfs_from_response, pfs_event) ~ 1, 
                    data = cart1),
            title = "Duration of response", 
            font.main = c(24, "bold", "black"), 
-           font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
+           font.x = c(14, "bold", "black"), font.y = c(14, "bold", "black"), 
            legend = "none",
            font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
@@ -2399,6 +2575,25 @@ ggsurvplot(survfit(Surv(months_at_pfs_from_response, pfs_event) ~ 1,
 
 survfit(Surv(months_at_pfs_from_response, pfs_event) ~ 1, 
                    data = cart1)
+
+# ggsurvplot(survfit(Surv(months_at_pfs_from_response, pfs_event) ~ any_bcma, 
+#                    data = cart1),
+#            title = "Duration of response", 
+#            font.main = c(24, "bold", "black"), 
+#            font.x = c(14, "bold", "black"), font.y = c(14, "bold", "black"), 
+#            legend = "top", legend.title = "Any BCMA therap",
+#            legend.labs = c("No", "Yes"),
+#            font.legend = c(14, "bold", "black"),
+#            font.tickslab = c(18, "bold", "black"), 
+#            size = 1.5,
+#            xlim = c(0, 12),
+#            pval=TRUE,
+#            risk.table = TRUE,
+#            risk.table.col = "strata",
+#            break.time.by = 3,
+#            ylab = "Duration of response (probability)",
+#            xlab = "Time since earliest response (months)", ggtheme = theme_classic(), palette = c("Set1")  
+# ) + guides(colour = guide_legend(ncol = 2))
 ```
 
 
@@ -2537,7 +2732,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Did_pati
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -2604,7 +2799,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ AnyBCMA,
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -2665,7 +2860,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ Blenrep,
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -2732,7 +2927,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ BCMA_ont
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -2799,7 +2994,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ BCMA_oth
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -2860,7 +3055,7 @@ myplot <- ggsurvplot(survfit(Surv(days_at_os_from_infusion, os_event) ~ cytogene
            font.x = c(20, "bold", "black"), font.y = c(20, "bold", "black"), 
            font.legend = c(14, "bold", "black"), font.tickslab = c(18, "bold", "black"), 
            size = 1.5,
-           
+           xlim = c(0, 12),
            pval=TRUE, 
            # legend.labs=c(""),
            # palette = c("black", "green","blue", "red"), 
@@ -3126,10 +3321,44 @@ tbl2 <- list(
     survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ 1, 
                    data = cart1),
     survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ did_patient_met_criteria_for_kar_m_ma1_pre_car_t, 
-                   data = cart1),
-    
-    # survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ age, 
-    #                data = cart1),
+                   data = cart1)
+  ) %>%
+  tbl_survfit(times = c(3, 6),
+              label_header = "**PFS Rate at {time} Months**")
+
+tbl_merge(list(tbl1, tbl2))
+```
+
+Extra PFS analysis
+```{r}
+tbl1 <- tbl_survfit(
+  cart1,
+  y = Surv(days_at_pfs_from_infusion, pfs_event),
+  include = c(agecat, male_sex, sex, extramedullary_disease_yes_no, 
+              disease_status_at_time_of_referral_relapsed_vs_refractory, 
+              plasma_cell_leukemia_yes_no, amyloid_yes_no, poems, 
+              non_secretory_mm_yes_no, high_marrow_burden_50_percent, 
+              ecog_at_consult, ecog_at_ld, r_iss_at_car_t_infusion, 
+              cytogenetics, deletion_17p_prior_to_car_t_infusion_yes_no, 
+              t_4_14_prior_to_car_t_infusion_yes_no, 
+              t_14_16_prior_to_car_t_infusion_yes_no, 
+              bridging_therapy_yes_no, number_prior_lines_therapy, 
+              prior_auto_sct_yes_no, 
+              asct_within_12_weeks_prior_to_apheresis_yes_no, 
+              prior_allo_sct_yes_no, blenrep, any_bcma, bcma_ontrial, 
+              bcma_other, immuno, proteasome, doubleref, tripleref, 
+              pentaref, cart_cell_dose, infection_yes_no, tocilizumab_yes_no, 
+              steroid_use_yes_no, anakinra_yes_no, baseline_b2m, ecog_or_2_yes_no, 
+              renal_insufficiency_cr_cl_45_m_l_min_yes_no, lvef_45_percent_yes_no, 
+              anc_1000_u_l_yes_no, hemoglobin_8_g_d_l_yes_no, platelets_50k_yes_no,
+              h_o_or_presence_of_plasma_cell_leukemia_waldenstroms_poems_or_amyloidosis_yes_no
+              ),
+  probs = 0.5,
+  label_header = "**Median PFS**"
+)
+
+# 3 month pfs rate
+tbl2 <- list(
     survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ agecat, 
                    data = cart1),
     survfit(Surv(days_at_pfs_from_infusion, pfs_event) ~ male_sex, 
@@ -3237,14 +3466,45 @@ tbl2 <- list(
     #                data = cart1)
   ) %>%
   tbl_survfit(times = c(3, 6),
-              label_header = "**PFS Rate at {time} Months**",
-              type = list(
-                c(age
-                ) ~ "continuous"))
+              label_header = "**PFS Rate at {time} Months**")
 
 tbl_merge(list(tbl1, tbl2))
 ```
 
+P-value log rank
+```{r}
+cart1 %>% 
+  select(agecat, male_sex, sex, extramedullary_disease_yes_no, 
+              disease_status_at_time_of_referral_relapsed_vs_refractory,
+              plasma_cell_leukemia_yes_no, amyloid_yes_no, poems,
+              non_secretory_mm_yes_no, high_marrow_burden_50_percent,
+              ecog_at_consult, ecog_at_ld, r_iss_at_car_t_infusion,
+              cytogenetics, deletion_17p_prior_to_car_t_infusion_yes_no,
+              t_4_14_prior_to_car_t_infusion_yes_no,
+              t_14_16_prior_to_car_t_infusion_yes_no,
+              bridging_therapy_yes_no, number_prior_lines_therapy,
+              prior_auto_sct_yes_no) %>% 
+  tbl_uvregression(method = survival::coxph,
+                 y = (Surv(time = cart1$days_at_pfs_from_infusion, event = cart1$pfs_event)),
+                 exponentiate = TRUE) %>% 
+    modify_column_hide(c(stat_n, estimate, ci)) %>% 
+    bold_p(t = .05)# %>% add_nevent(location = "level") %>% add_n(location = "level")
+
+cart1 %>% 
+  select(asct_within_12_weeks_prior_to_apheresis_yes_no, 
+              prior_allo_sct_yes_no, blenrep, any_bcma, bcma_ontrial, 
+              bcma_other, immuno, proteasome, doubleref, tripleref, 
+              pentaref, cart_cell_dose, infection_yes_no, tocilizumab_yes_no, 
+              steroid_use_yes_no, anakinra_yes_no, baseline_b2m, ecog_or_2_yes_no, 
+              renal_insufficiency_cr_cl_45_m_l_min_yes_no, lvef_45_percent_yes_no, 
+              anc_1000_u_l_yes_no, hemoglobin_8_g_d_l_yes_no, platelets_50k_yes_no,
+              h_o_or_presence_of_plasma_cell_leukemia_waldenstroms_poems_or_amyloidosis_yes_no) %>% 
+  tbl_uvregression(method = survival::coxph,
+                 y = (Surv(time = cart1$days_at_pfs_from_infusion, event = cart1$pfs_event)),
+                 exponentiate = TRUE) %>% 
+    modify_column_hide(c(stat_n, estimate, ci)) %>% 
+    bold_p(t = .05)# %>% add_nevent(location = "level") %>% add_n(location = "level")
+```
 
 
 
