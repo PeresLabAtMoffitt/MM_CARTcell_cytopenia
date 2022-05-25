@@ -39,6 +39,7 @@ options(gtsummary.as_gt.addl_cmds = "gt::tab_options(table.font.size = 14, data_
 ```
 
 ```{r library}
+library(here)
 library(tidyverse)
 library(ggplot2)
 library(gtsummary)
@@ -54,34 +55,40 @@ library(survminer)
 # path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Cytopenias")
 
 Characteristics <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Characteristics", skip = 1, n_max = 54) %>% 
   mutate(MRN = as.character(MRN),
          MRN = coalesce(MRN, PT))
 Counts <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Counts") %>% 
   mutate(MRN = as.character(MRN),
          MRN = coalesce(MRN, PT))
 Infections <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Infections") %>% 
   mutate(MRN = as.character(MRN),
          MRN = coalesce(MRN, PT))
 Support <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Support",
                     range = "A1:U53") %>% 
   mutate(MRN = as.character(MRN),
          MRN = coalesce(MRN, PT))
 Pneumo_titers <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Pneumo Titers") %>% 
   mutate(MRN = as.character(MRN))
 Other_titers <-
-  readxl::read_xlsx("/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx",
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_4.13.22.xlsx"),
                     sheet = "Other Titers") %>% 
   mutate(MRN = as.character(MRN))
+Bridging <- 
+  readxl::read_xlsx(paste0(here(), "/ide_cel/CytopeniaManuscriptData_5.21.xlsx"),
+                    sheet = "Characteristics", skip = 1, n_max = 54) %>% 
+  mutate(MRN = as.character(MRN),
+         MRN = coalesce(MRN, PT)) %>% 
+  select(PT, MRN, `Days from last bridging to CAR-T infusion`)
 ```
 
 
@@ -92,7 +99,8 @@ cart <- full_join(Characteristics, Counts, by = c("PT", "MRN")) %>%
   full_join(., Support, by = c("PT", "MRN", "Date of CAR T infusion")) %>% 
   full_join(., Pneumo_titers, by = c("PT", "MRN")) %>% 
   select(-`Date of leukapheresis.y`, `Date of leukapheresis` = `Date of leukapheresis.x`) %>% 
-  full_join(., Other_titers, by = c("PT", "MRN"))
+  full_join(., Other_titers, by = c("PT", "MRN")) %>% 
+  full_join(., Bridging, by = c("PT", "MRN"))
 ```
 
 
@@ -180,51 +188,46 @@ cart1 <- cart %>%
             ~ case_when(
               . == 1                                              ~ "Refractory",
               . == 0                                              ~ "Exposed",
-              TRUE                                                ~ NA_character_
+              is.na(.)                                            ~ "Not Refractory"
             )) %>% 
   mutate(immuno = case_when(
-    `Lenalidomide (exposed=0 vs. refractory=1)` == "Exposed" &
-      `Pomalidomide (exposed=0 vs. refractory=1)` == "Exposed"        ~ "NO",
     `Lenalidomide (exposed=0 vs. refractory=1)` == "Refractory" |
-      `Pomalidomide (exposed=0 vs. refractory=1)` == "Refractory"     ~ "YES"
+      `Pomalidomide (exposed=0 vs. refractory=1)` == "Refractory"     ~ "YES",
+    TRUE        ~ "NO"
   )) %>% 
   mutate(proteasome = case_when(
-    `Bortezomib (exposed=0 vs. refractory=1)` == "Exposed" &
-      `Carfilzomib (exposed=0 vs. refractory=1)` == "Exposed"      ~ "NO",
     `Bortezomib (exposed=0 vs. refractory=1)` == "Refractory" |
-      `Carfilzomib (exposed=0 vs. refractory=1)` == "Refractory"   ~ "YES"
+      `Carfilzomib (exposed=0 vs. refractory=1)` == "Refractory"   ~ "YES",
+    TRUE      ~ "NO"
   )) %>% 
   mutate(dara = case_when(
     `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"      ~ "YES",
-    `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"             ~ "NO"
+    TRUE             ~ "NO"
   )) %>% 
   mutate(doubleref = case_when(
-    proteasome == "NO" | 
-      immuno == "NO"                                              ~ "NO",
     proteasome == "YES" &
-      immuno == "YES"                                         ~ "YES"
+      immuno == "YES"                                         ~ "YES",
+    TRUE                                              ~ "NO"
   )) %>% 
   mutate(tripleref = case_when(
-    proteasome == "NO" | 
-      immuno == "NO" |
-      `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"      ~ "NO",
     proteasome == "YES" &
       immuno == "YES" &
-      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"        ~ "YES"
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"        ~ "YES",
+    TRUE      ~ "NO"
   )) %>% 
   mutate(pentaref = case_when(
-    `Bortezomib (exposed=0 vs. refractory=1)` == "Exposed" | 
-      `Carfilzomib (exposed=0 vs. refractory=1)` == "Exposed" |
-      `Lenalidomide (exposed=0 vs. refractory=1)` == "Exposed" | 
-      `Pomalidomide (exposed=0 vs. refractory=1)` == "Exposed" | 
-      `Daratumumab (exposed=0 vs. refractory=1)` == "Exposed"     ~ "NO",
     `Bortezomib (exposed=0 vs. refractory=1)` == "Refractory" & 
       `Carfilzomib (exposed=0 vs. refractory=1)` == "Refractory" &
       `Lenalidomide (exposed=0 vs. refractory=1)` == "Refractory" & 
       `Pomalidomide (exposed=0 vs. refractory=1)` == "Refractory" & 
-      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"  ~ "YES"
+      `Daratumumab (exposed=0 vs. refractory=1)` == "Refractory"  ~ "YES",
+    TRUE     ~ "NO"
   )) %>% 
-# CRS 
+  mutate(number_prior_lines_therapy = case_when(
+    `Number of prior lines of therapy` <= 4           ~ "4",
+    `Number of prior lines of therapy` > 4            ~ ">4"
+  )) %>%
+  # CRS 
   mutate(CRS_any = ifelse(`Max CRS grade (0-5)` == 0, "NO", "YES"),
          CRS_any2 = ifelse(CRS_any== "NO", 0, 1),
          CRS_gradecat = case_when(
@@ -962,15 +965,19 @@ cart1 <- cart %>%
   mutate(`IgG HSV1/2 apheresis` = case_when(
     `IgG HSV1/2 apheresis` < 0.9         ~ "Negative",
     `IgG HSV1/2 apheresis` >= 0.9 &
-      `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
+      `IgG HSV1/2 apheresis` < 1.10      ~ "Indeterminate",
     `IgG HSV1/2 apheresis` >= 1.10       ~ "Positive",
   )) %>%
   mutate(`IgG HSV1/2 D90` = case_when(
     `IgG HSV1/2 D90` < 0.9         ~ "Negative",
     `IgG HSV1/2 D90` >= 0.9 &
-      `IgG HSV1/2 D90` < 1.10      ~ "indeterminate",
+      `IgG HSV1/2 D90` < 1.10      ~ "Indeterminate",
     `IgG HSV1/2 D90` >= 1.10       ~ "Positive",
   )) %>% 
+  mutate_at(c("IgG HSV1/2 apheresis",
+              "IgG HSV1/2 D90"),
+            ~ factor(., levels = c("Positive", "Indeterminate", "Negative"))) %>%
+  
   mutate_at(c("VZV IgG apheresis",
               "VZV IgG D90 (1=pos, 0=neg)",
               "CMV IgG apheresis",
@@ -978,16 +985,13 @@ cart1 <- cart %>%
             ~ case_when(
               . == 1                                              ~ "Positive",
               . == 0                                              ~ "Negative",
-              . == "Equivocal"                                    ~ "Negative",
-              TRUE                                                ~ as.character(.)
+              . == "Equivocal"                                    ~ "Equivocal"
             )) %>% 
-  mutate_at(c("IgG HSV1/2 apheresis",
-              "IgG HSV1/2 D90",
-              "VZV IgG apheresis",
+  mutate_at(c("VZV IgG apheresis",
               "VZV IgG D90 (1=pos, 0=neg)",
               "CMV IgG apheresis",
               "CMV IgG D90 (1=pos, 0=neg)"),
-            ~ factor(., levels = c("Positive", "Negative"))) %>% 
+            ~ factor(., levels = c("Positive", "Negative", "Equivocal"))) %>% 
   mutate(across(starts_with("Pneumo"), ~ case_when(
     . <= 1                                                    ~ "Negative",
     . > 1                                                     ~ "Positive"
@@ -1565,12 +1569,23 @@ tbl_merge(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8),
 cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
   filter(is.na(Not_evaluable_at_30days)) %>% 
-  select(
-    Age, agecat, male_sex, Sex,
+  select(`Circulating Plasma Cells? (yes=1, no=0)`,
+         number_prior_lines_therapy,
+         `Days from last bridging to CAR-T infusion`,
+         "Lenalidomide (exposed=0 vs. refractory=1)",
+              "Bortezomib (exposed=0 vs. refractory=1)",
+              "Carfilzomib (exposed=0 vs. refractory=1)",
+              "Pomalidomide (exposed=0 vs. refractory=1)",
+              "Daratumumab (exposed=0 vs. refractory=1)",
+         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+         cytopenia_apheresis,`cytopenia_-5d`,
+         `marrow % cellularity day +30`,
+         
+         Age, agecat, male_sex, Sex,
          `Extramedullary Disease? (yes=1, no=0)`, 
          `High Marrow Burden? (yes=1, no=0)`, `ECOG at LD (at baseline visit)`, `R-ISS at CAR-T Infusion`, cyto, 
          `Bridging Therapy (Yes=1, No=0)`,
-    `Received alkylating therapy with bridging (Yes=1, No=0)`,
+         `Received alkylating therapy with bridging (Yes=1, No=0)`,
          `Prior auto SCT (yes=1, no=0)`, `Prior Allo SCT (Yes=1, No=0)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
@@ -1601,14 +1616,25 @@ cart1 %>%
 cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
   filter(is.na(Not_evaluable_at_90days)) %>% 
-  select(Age, agecat, male_sex, Sex,
+  select(`Circulating Plasma Cells? (yes=1, no=0)`,
+         number_prior_lines_therapy,
+         `Days from last bridging to CAR-T infusion`,
+         "Lenalidomide (exposed=0 vs. refractory=1)",
+              "Bortezomib (exposed=0 vs. refractory=1)",
+              "Carfilzomib (exposed=0 vs. refractory=1)",
+              "Pomalidomide (exposed=0 vs. refractory=1)",
+              "Daratumumab (exposed=0 vs. refractory=1)",
+         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+         cytopenia_apheresis,`cytopenia_-5d`,
+         `marrow % cellularity day +90`,
+         
+         Age, agecat, male_sex, Sex,
          `Extramedullary Disease? (yes=1, no=0)`, 
          `High Marrow Burden? (yes=1, no=0)`, `ECOG at LD (at baseline visit)`, `R-ISS at CAR-T Infusion`, cyto, 
          `Bridging Therapy (Yes=1, No=0)`,
          `Received alkylating therapy with bridging (Yes=1, No=0)`,
          `Prior auto SCT (yes=1, no=0)`, `Prior Allo SCT (Yes=1, No=0)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
-         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
          `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`,
          `gr3_cytopenia_90d`) %>% 
   tbl_summary(by = `gr3_cytopenia_90d`,
@@ -1636,7 +1662,8 @@ cart1 %>%
 tbl1 <- cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
   filter(is.na(Not_evaluable_at_30days)) %>% 
-  select(CRS_gradecat,
+  select(`Total cell dose (million cells)`,
+         CRS_gradecat,
          `Day of onset of CRS relative to infusion`,
          `Day of Max CRS (relative to infusion)`, `Duration of CRS (days)`, 
          
@@ -1758,7 +1785,17 @@ Jenn
 ```{r}
 cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
-  select(CRS_gradecat, ICANS_gradecat,
+  select(number_prior_lines_therapy,
+         `Prior auto SCT (yes=1, no=0)`,
+         `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
+         `Received alkylating therapy with bridging (Yes=1, No=0)`,
+         `Days from last bridging to CAR-T infusion`,
+         `Total cell dose (million cells)`,
+         "Need for G-CSF post infus (Yes, No)",
+         "CD34 stem cell boost",
+         "Need for IVIG (Yes, No)",
+         
+         CRS_gradecat, ICANS_gradecat,
          `Steroid use (Yes=1, No=0)`, 
          `Tocilizumab (Yes=1, No=0)`, `Anakinra (Yes=1, No=0)`,
          `Bridging Therapy (Yes=1, No=0)`, any_infection) %>% 
@@ -1770,8 +1807,19 @@ cart1 %>%
   modify_spanning_header(all_stat_cols() ~ "**Any infection**")
 
 cart1 %>% 
+  arrange(MRN, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(MRN, .keep_all = TRUE) %>% 
-  select(CRS_gradecat, ICANS_gradecat,
+  select(number_prior_lines_therapy,
+         `Prior auto SCT (yes=1, no=0)`,
+         `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
+         `Received alkylating therapy with bridging (Yes=1, No=0)`,
+         `Days from last bridging to CAR-T infusion`,
+         `Total cell dose (million cells)`,
+         "Need for G-CSF post infus (Yes, No)",
+         "CD34 stem cell boost",
+         "Need for IVIG (Yes, No)",
+         
+         CRS_gradecat, ICANS_gradecat,
          `Steroid use (Yes=1, No=0)`, 
          `Tocilizumab (Yes=1, No=0)`, `Anakinra (Yes=1, No=0)`,
          `Bridging Therapy (Yes=1, No=0)`, any_sevinfection) %>% 
@@ -1806,6 +1854,7 @@ cart1 %>%
   modify_spanning_header(all_stat_cols() ~ "**Any infection**")
 
 cart1 %>% 
+  arrange(MRN, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(MRN, .keep_all = TRUE) %>% 
   select(`IgG day -5`, `IgA day -5`, `IgM day -5`,
          `WBC apheresis`, `ANC apheresis`,
@@ -2012,7 +2061,7 @@ plot_annotation(tag_levels = "A")
 
 ## Figure 3. Cellular and humoral immune reconstitution after ide-cel
 **I can probably remove the x axis title on the 4 top plots**
-```{r, fig.width=12, fig.height=12}
+```{r timeserie, fig.width=12, fig.height=12}
 cart2 <- cart1 %>% 
   distinct(MRN, .keep_all = TRUE)
 # WBC
@@ -2193,9 +2242,341 @@ IgG_fig <- IgG_fig %>%
     labels = c("Apheresis", "-5", "0", "30", "90"))# + 
   # ylim(0, 2000)
 
-(WBC_fig | ANC_fig) /
-  (Hb_fig | ALC_fig) /
-  (Plt_fig | IgG_fig) +
+# CD4
+timepoints3 <- c(-28, 30, 90)
+CD4_fig <-
+  data.frame(timepoints3, t(round(
+    sapply(cart2[, c(
+      "CD4 apheresis",
+      "CD4 day +30",
+      "CD4 day +90"
+    )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
+  )))
+CD4_fig <- CD4_fig %>% 
+  ggplot(aes(x = timepoints3, y = median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD4") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+
+#CD8
+CD8_fig <-
+  data.frame(timepoints3, t(round(
+    sapply(cart2[, c(
+      "CD8 apheresis",
+      "CD8 day +30",
+      "CD8 day +90"
+    )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
+  )))
+CD8_fig <- CD8_fig %>% 
+  ggplot(aes(x = timepoints3, y = median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD8") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+
+#CD19
+CD19_fig <-
+  data.frame(timepoints3, t(round(
+    sapply(cart2[, c(
+      "CD19 apheresis",
+      "CD19 day +30",
+      "CD19 day +90"
+    )], MedianCI, conf.level = 0.95, na.rm = TRUE), 9
+  )))
+CD19_fig <- CD19_fig %>% 
+  ggplot(aes(x = timepoints3, y = median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD19") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+
+(WBC_fig | ANC_fig | CD4_fig) /
+  (Hb_fig | ALC_fig | CD8_fig) /
+  (Plt_fig | IgG_fig | CD19_fig) +
+  plot_annotation(tag_levels = "A")
+```
+<br>
+
+Aggregated median
+```{r timeserie aggreagate med}
+timepoints <- c(-28, -5, 0, 7, 14, 21, 30, 60, 90)
+a <- cart2 %>% 
+  select(Site, "WBC apheresis",
+                 "WBC day -5 (k/ul)",
+                 "WBC day 0 (k/uL)",
+                 "WBC day +7",
+                 "WBC day +14",
+                 "WBC day +21",
+                 "WBC day +30",
+                 "WBC day +60",
+                 "WBC day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median WBC") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+  )
+
+b <- cart2 %>% 
+  select(Site, "ANC apheresis",
+      "ANC day -5 (k/ul)",
+      "ANC day 0 (k/uL)",
+      "ANC day +7",
+      "ANC day +14",
+      "ANC day +21",
+      "ANC day +30",
+      "ANC day +60",
+      "ANC day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median ANC") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+  ) 
+
+
+c <- cart2 %>% 
+  select(Site, "Hb apheresis",
+      "Hb day -5 (k/ul)",
+      "Hb day 0 (k/uL)",
+      "Hb day +7",
+      "Hb day +14",
+      "Hb day +21",
+      "Hb day +30",
+      "Hb day +60",
+      "Hb day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median Hb") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+  ) 
+  
+d <- cart2 %>% 
+  select(Site, "ALC apheresis",
+      "ALC day -5 (k/ul)",
+      "ALC day 0 (k/uL)",
+      "ALC day +7",
+      "ALC day +14",
+      "ALC day +21",
+      "ALC day +30",
+      "ALC day +60",
+      "ALC day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median ALC") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+  ) 
+  
+e <- cart2 %>% 
+  select(Site, "Plt apheresis",
+      "Plt day -5 (k/ul)",
+      "Plt day 0 (k/uL)",
+      "Plt day +7",
+      "Plt day +14",
+      "Plt day +21",
+      "Plt day +30",
+      "Plt day +60",
+      "Plt day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median Plt") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 7, 14, 21, 30, 60, 90),
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+  )
+
+timepoints2 <- c(-28, -5, 30, 90)
+f <- cart2 %>% 
+  select(Site, "IgG apheresis", 
+      "IgG day -5",
+      # "IgG day 0 (k/uL)", 
+      "IgG day +30", 
+      "IgG day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints2) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median Plt") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, -5, 0, 30, 90),
+    labels = c("Apheresis", "-5", "0", "30", "90")
+  )
+
+timepoints3 <- c(-28, 30, 90)
+g <- cart2 %>% 
+  select(Site, "CD4 apheresis",
+      "CD4 day +30",
+      "CD4 day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints3) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD4") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+h <- cart2 %>% 
+  select(Site, "CD8 apheresis",
+      "CD8 day +30",
+      "CD8 day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints3) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD8") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+i <- cart2 %>% 
+  select(Site, "CD19 apheresis",
+      "CD19 day +30",
+      "CD19 day +90") %>% 
+  group_by(Site) %>% 
+  summarise(across(.cols = everything(), list(mean = MedianCI) , na.rm = TRUE)) %>% 
+  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 1), .before = 1) %>% 
+  ungroup() %>% select(-Site) %>% 
+  group_by(type) %>% 
+  summarise(across(.cols = everything(), list(mean = median) , na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -type, names_to = 'Type') %>% 
+  pivot_wider(names_from = type, values_from = value) %>% 
+  mutate(timepoints = timepoints3) %>% 
+  ggplot(aes(x = timepoints, y = Median)) + 
+  geom_line(col = "blue") + 
+  xlab("Days relative to infusion") + 
+  ylab("Median CD19") + 
+  theme_classic() + 
+  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
+  scale_x_continuous(
+    breaks = c(-28, 30, 90),
+    labels = c("Apheresis", "30", "90")
+  )
+
+(a | b | g) /
+  (c | d | h) /
+  (e | f | i) +
   plot_annotation(tag_levels = "A")
 ```
 
@@ -2327,11 +2708,37 @@ a %>% filter(grade == "Grade 3+") %>%
            position=position_dodge(width=0.9), data= b,
            aes(x= day, y= perc, fill= name), alpha= 0.4)+
   scale_fill_brewer(palette = "Spectral")+
-  # scale_fill_manual(values = c("#D7191C", "#FDAE61", "violet", "#ABDDA4", "#2B83BA"))+
   labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
   theme_classic()+
   scale_alpha_continuous(limits = c(0.4,1), breaks = c(0.4,1),
                          labels= c("Any Grade", "Grade 3+"))
+
+a %>% filter(grade == "Grade 3+") %>% 
+  ggplot(aes(x= day, 
+             y= perc, 
+             fill= name, 
+             ))+
+  geom_bar(stat = "identity",
+           position=position_dodge(width=0.9))+
+  scale_fill_brewer(palette = "Spectral")+
+  ylim(0, 100)+
+  labs(fill = NULL, x= NULL, y = "%")+
+  theme_classic()
+
+a %>%
+  ggplot(aes(x= grade, 
+             y= perc, 
+             fill= name,
+             alpha= grade
+             ))+
+  geom_bar(stat = "identity",
+           position=position_dodge(width=0.9))+
+  scale_fill_brewer(palette = "Spectral")+
+  labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
+  theme_classic()+
+  scale_alpha_discrete(range = c(0.7, 1),
+                       labels= c("Any Grade", "Grade 3+"))+
+  facet_wrap(. ~ day)
 ```
  
 
@@ -2363,20 +2770,6 @@ Lauren
 ## Figure S1. Viral titers after ide-cel
 
 ### A)	HSV 1/2 IgG
-
-Example from prior cytopenia paper below. We can show this data however you think best
-Interpretation: ≤0.89=negative (not immune)
-                        0.90-1.09=indeterminate (can consider negative for purposes of analysis)
-                        ≥1.10=positive (immune)
-                        
-```{r, echo=TRUE}
-# mutate(`IgG HSV1/2 apheresis` = case_when(
-#     `IgG HSV1/2 apheresis` < 0.9         ~ "Negative",
-#     `IgG HSV1/2 apheresis` >= 0.9 &
-#       `IgG HSV1/2 apheresis` < 1.10      ~ "indeterminate",
-#     `IgG HSV1/2 apheresis` >= 1.10       ~ "Positive",
-#   ))
-```
 
 ```{r}
 # cart2 %>% 
@@ -2411,46 +2804,46 @@ Interpretation: ≤0.89=negative (not immune)
 #   geom_bar()
 
 # Histogram
-cart2 %>% 
-  select(PT, 
-         `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
-  pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(name, c("na":"me"), sep = " ") %>% 
-  filter(!is.na(value)) %>% 
-  group_by(name, day, value) %>% 
-  summarise(count=n()) %>% 
-  mutate(perc=(count/sum(count)*100)
-  ) %>% 
-  ggplot(aes(x= day, y= perc, fill= value))+
-  geom_bar(stat = "identity")+
-  labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
-       fill= "Immunity")+
-  scale_y_continuous(expand = c(0, 0))+
-  theme_classic()
-
-library(ggpattern)
-cart2 %>% 
-  select(PT, 
-         `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
-  pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
-  separate("name", into = c("na", "me", "day"), sep = " ") %>% 
-  unite(name, c("na":"me"), sep = " ") %>% 
-  filter(!is.na(value)) %>% 
-  group_by(name, day, value) %>% 
-  summarise(count=n()) %>% 
-  mutate(perc=(count/sum(count)*100)
-  ) %>% 
-  ggplot(aes(x= day, y= perc))+
-  geom_bar_pattern(aes(pattern = value),
-                   stat = "identity",
-    fill            = 'white', 
-    colour          = 'black')+
-  # geom_bar(stat = "identity")+
-  labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
-       fill= "Immunity")+
-  scale_y_continuous(expand = c(0, 0))+
-  theme_classic()
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+#   ggplot(aes(x= day, y= perc, fill= value))+
+#   geom_bar(stat = "identity")+
+#   labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+#        fill= "Immunity")+
+#   scale_y_continuous(expand = c(0, 0))+
+#   theme_classic()
+# 
+# library(ggpattern)
+# cart2 %>% 
+#   select(PT, 
+#          `IgG HSV1/2 apheresis`, `IgG HSV1/2 D90`) %>%
+#   pivot_longer(cols = `IgG HSV1/2 apheresis` : `IgG HSV1/2 D90`) %>% 
+#   separate("name", into = c("na", "me", "day"), sep = " ") %>% 
+#   unite(name, c("na":"me"), sep = " ") %>% 
+#   filter(!is.na(value)) %>% 
+#   group_by(name, day, value) %>% 
+#   summarise(count=n()) %>% 
+#   mutate(perc=(count/sum(count)*100)
+#   ) %>% 
+#   ggplot(aes(x= day, y= perc))+
+#   geom_bar_pattern(aes(pattern = value),
+#                    stat = "identity",
+#     fill            = 'white', 
+#     colour          = 'black')+
+#   # geom_bar(stat = "identity")+
+#   labs(x= "Days relative to infusion", y= "Proportion immunity (%)",
+#        fill= "Immunity")+
+#   scale_y_continuous(expand = c(0, 0))+
+#   theme_classic()
 
 # cart2 %>% 
 #   select(PT, 
@@ -2804,7 +3197,7 @@ draw(ht_list, heatmap_legend_side = "bottom")
 
 
 ```{r, fig.width=15, fig.height=12}
-ghgghjg
+# ghgghjg
 ```
 
 
