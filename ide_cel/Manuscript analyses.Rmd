@@ -1513,6 +1513,7 @@ cart1 %>%
   distinct(MRN, .keep_all = TRUE) %>% 
   filter(is.na(Not_evaluable_at_30days)) %>% 
   select(`Circulating Plasma Cells? (yes=1, no=0)`,
+         `Number of prior lines of therapy`,
          number_prior_lines_therapy,
          `Days from last bridging to CAR-T infusion`,
          "Lenalidomide (exposed=0 vs. refractory=1)",
@@ -1521,7 +1522,6 @@ cart1 %>%
          "Pomalidomide (exposed=0 vs. refractory=1)",
          "Daratumumab (exposed=0 vs. refractory=1)",
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
-         cytopenia_apheresis,`cytopenia_-5d`,
          `marrow % cellularity day +30`,
          
          Age, agecat, male_sex, Sex,
@@ -1534,7 +1534,14 @@ cart1 %>%
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
          `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`,
-         cytopenia_apheresis, `cytopenia_-5d`, gr3_cytopenia_apheresis, `gr3_cytopenia_-5d`,
+         cytopenia_apheresis, Neutropenia_apheresis,
+         Anemia_apheresis,Thrombocytopenia_apheresis,
+         `cytopenia_-5d`, `Neutropenia_-5d`,
+         `Anemia_-5d`, `Thrombocytopenia_-5d`,
+         gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+         gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+         `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+         `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
          `gr3_cytopenia_30d`) %>% 
   tbl_summary(by = `gr3_cytopenia_30d`,
               type = list(
@@ -1547,9 +1554,18 @@ cart1 %>%
                   `Prior auto SCT (yes=1, no=0)`,
                   immuno, proteasome, dara,
                   doubleref, tripleref, pentaref,
-                `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`)
+                  cytopenia_apheresis, Neutropenia_apheresis,
+                  Anemia_apheresis,Thrombocytopenia_apheresis,
+                  `cytopenia_-5d`, `Neutropenia_-5d`,
+                  `Anemia_-5d`, `Thrombocytopenia_-5d`,
+                  gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+                  gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+                  `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+                  `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+                  `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`)
                 ~"categorical",
-                `marrow % cellularity day +30` ~ "continuous"),
+                c(`Number of prior lines of therapy`, `marrow % cellularity day +30`)
+                ~ "continuous"),
               
               statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1
@@ -1565,6 +1581,7 @@ cart1 %>%
   distinct(MRN, .keep_all = TRUE) %>% 
   filter(is.na(Not_evaluable_at_90days)) %>% 
   select(`Circulating Plasma Cells? (yes=1, no=0)`,
+         `Number of prior lines of therapy`,
          number_prior_lines_therapy,
          `Days from last bridging to CAR-T infusion`,
          "Lenalidomide (exposed=0 vs. refractory=1)",
@@ -1573,7 +1590,6 @@ cart1 %>%
          "Pomalidomide (exposed=0 vs. refractory=1)",
          "Daratumumab (exposed=0 vs. refractory=1)",
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
-         cytopenia_apheresis,`cytopenia_-5d`,
          `marrow % cellularity day +90`,
          Age, agecat, male_sex, Sex,
          `Extramedullary Disease? (yes=1, no=0)`, 
@@ -1583,6 +1599,14 @@ cart1 %>%
          `Prior auto SCT (yes=1, no=0)`, `Prior Allo SCT (Yes=1, No=0)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
          `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`,
+         cytopenia_apheresis, Neutropenia_apheresis,
+         Anemia_apheresis,Thrombocytopenia_apheresis,
+         `cytopenia_-5d`, `Neutropenia_-5d`,
+         `Anemia_-5d`, `Thrombocytopenia_-5d`,
+         gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+         gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+         `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+         `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
          `gr3_cytopenia_90d`) %>% 
   tbl_summary(by = `gr3_cytopenia_90d`,
               type = list(
@@ -1595,10 +1619,18 @@ cart1 %>%
                   `Prior auto SCT (yes=1, no=0)`,
                   immuno, proteasome, dara,
                   doubleref, tripleref, pentaref,
+                  cytopenia_apheresis, Neutropenia_apheresis,
+                  Anemia_apheresis,Thrombocytopenia_apheresis,
+                  `cytopenia_-5d`, `Neutropenia_-5d`,
+                  `Anemia_-5d`, `Thrombocytopenia_-5d`,
+                  gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+                  gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+                  `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+                  `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
                   `Did patient meet eligibility criteria for KarMMa 1 on the day of apheresis (Yes=1, No=0)`)
                 ~ "categorical",
-                `marrow % cellularity day +90` ~ "continuous"),
-              
+                c(`Number of prior lines of therapy`, `marrow % cellularity day +90`)
+                ~ "continuous"),
               statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1
   ) %>% 
