@@ -1769,6 +1769,7 @@ Jenn
 cart1 %>% 
   distinct(MRN, .keep_all = TRUE) %>% 
   select(number_prior_lines_therapy,
+         `Number of prior lines of therapy`,
          `Prior auto SCT (yes=1, no=0)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
          `Received alkylating therapy with bridging (Yes=1, No=0)`,
@@ -1783,7 +1784,9 @@ cart1 %>%
          `Tocilizumab (Yes=1, No=0)`, `Anakinra (Yes=1, No=0)`,
          `Bridging Therapy (Yes=1, No=0)`, any_infection) %>% 
   tbl_summary(by=any_infection, 
-              type = list(all_dichotomous() ~ "categorical")) %>%
+              statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
+              type = list(all_dichotomous() ~ "categorical", 
+                          `Number of prior lines of therapy` ~ "continuous")) %>%
   add_p() %>%  bold_labels() %>% add_stat_label() %>% 
   modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
   modify_footnote(update = everything() ~ NA) %>%
@@ -1793,6 +1796,7 @@ cart1 %>%
   arrange(MRN, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(MRN, .keep_all = TRUE) %>% 
   select(number_prior_lines_therapy,
+         `Number of prior lines of therapy`,
          `Prior auto SCT (yes=1, no=0)`,
          `Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes=1, No=0)`,
          `Received alkylating therapy with bridging (Yes=1, No=0)`,
@@ -1807,7 +1811,9 @@ cart1 %>%
          `Tocilizumab (Yes=1, No=0)`, `Anakinra (Yes=1, No=0)`,
          `Bridging Therapy (Yes=1, No=0)`, any_sevinfection) %>% 
   tbl_summary(by=any_sevinfection, 
-              type = list(all_dichotomous() ~ "categorical")) %>%
+              statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
+              type = list(all_dichotomous() ~ "categorical", 
+                          `Number of prior lines of therapy` ~ "continuous")) %>%
   add_p() %>%  bold_labels() %>% add_stat_label() %>% 
   modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
   modify_footnote(update = everything() ~ NA) %>%
