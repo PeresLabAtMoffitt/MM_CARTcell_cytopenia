@@ -40,6 +40,7 @@ options(gtsummary.as_gt.addl_cmds = "gt::tab_options(table.font.size = 14, data_
 ```
 
 ```{r library}
+library(here)
 library(tidyverse)
 library(lubridate)
 library(ggplot2)
@@ -53,11 +54,8 @@ library(survminer)
 ```
 
 ```{r load}
-# path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Cytopenias", "MM_CARTcell_cytopenia")
-# path <- getwd()
 MM_cart <-
-  readxl::read_xlsx(
-    "/Users/colinccm/Documents/GitHub/Peres/MM_CARTcell_cytopenia/RWE/FINAL 4.13.22 ASCO 2022 Myeloma CAR-T SOC Outcomes Spreadsheet.xlsx",
+  readxl::read_xlsx(paste0(here(), "/RWE/FINAL 4.13.22 ASCO 2022 Myeloma CAR-T SOC Outcomes Spreadsheet.xlsx"),
                     skip = 1, n_max = 198
                     ) %>% 
   rename(patient_id = `PT Identifier (DO NOT USE PHI)`)
