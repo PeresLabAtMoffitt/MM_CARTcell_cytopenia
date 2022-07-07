@@ -2603,7 +2603,7 @@ CD19_fig <- cart2 %>%
 
 As discussed at meeting, rather than showing count recovery over time plan to show Grade 3+ cytopenias (Hb, Plt, ANC, WBC) over time (Day –5, Day +30, Day +60, Day +90)
 **We want grade 3 only right?**
-```{r}
+```{r, fig.width=12, fig.height=7}
 # cart2 %>% 
 #   select(PT,
 #          `gr3_Leukopenia_-5d`, gr3_Leukopenia_30d, gr3_Leukopenia_60d, gr3_Leukopenia_90d,
@@ -2724,6 +2724,22 @@ a %>% filter(grade == "Grade 3+") %>%
   theme_classic()+
   scale_alpha_continuous(limits = c(0.4,1), breaks = c(0.4,1),
                          labels= c("Any Grade", "Grade 3+"))
+####################################################################################################
+# a %>% filter(grade == "Grade 3+") %>% 
+#   ggplot(aes(x= day, 
+#              y= perc, 
+#              fill= name, 
+#              ))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 4.5,
+#             position = position_dodge(width=0.9)
+#             )+
+#   
+#   scale_fill_brewer(palette = "Spectral")+
+#   ylim(0, 100)+
+#   labs(fill = NULL, x= NULL, y = "%")+
+#   theme_classic(base_size = 14)
 
 a %>% filter(grade == "Grade 3+") %>% 
   ggplot(aes(x= day, 
@@ -2732,25 +2748,78 @@ a %>% filter(grade == "Grade 3+") %>%
              ))+
   geom_bar(stat = "identity",
            position=position_dodge(width=0.9))+
+  geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 5,
+            position = position_dodge(width=0.9), vjust=-1.5
+            )+
+  
   scale_fill_brewer(palette = "Spectral")+
   ylim(0, 100)+
   labs(fill = NULL, x= NULL, y = "%")+
-  theme_classic()
+  theme_classic(base_size = 14)+
+  theme(legend.position="bottom")
 
-a %>%
-  ggplot(aes(x= grade, 
-             y= perc, 
-             fill= name,
-             alpha= grade
-             ))+
-  geom_bar(stat = "identity",
-           position=position_dodge(width=0.9))+
-  scale_fill_brewer(palette = "Spectral")+
-  labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
-  theme_classic()+
-  scale_alpha_discrete(range = c(0.7, 1),
-                       labels= c("Any Grade", "Grade 3+"))+
-  facet_wrap(. ~ day)
+# a %>% filter(grade == "Grade 3+") %>% 
+#   ggplot(aes(x= day, 
+#              y= perc, 
+#              fill= name, 
+#              ))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 4.5,
+#             position = position_dodge(width=0.9), fontface='bold'
+#             )+
+#   
+#   scale_fill_brewer(palette = "Spectral")+
+#   ylim(0, 100)+
+#   labs(fill = NULL, x= NULL, y = "%")+
+#   theme_classic(base_size = 14)
+
+# a %>% filter(grade == "Grade 3+") %>% 
+#   ggplot(aes(x= day, 
+#              y= perc, 
+#              fill= name, 
+#              ))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 4.5,
+#             position = position_dodge(width=0.9), color= "grey27"
+#             )+
+#   
+#   scale_fill_brewer(palette = "Spectral")+
+#   ylim(0, 100)+
+#   labs(fill = NULL, x= NULL, y = "%")+
+#   theme_classic(base_size = 14)
+
+# a %>% filter(grade == "Grade 3+") %>% 
+#   ggplot(aes(x= day, 
+#              y= perc, 
+#              fill= name, 
+#              ))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 5,
+#             position = position_dodge(width=0.9)
+#             )+
+#   
+#   scale_fill_brewer(palette = "Spectral")+
+#   ylim(0, 100)+
+#   labs(fill = NULL, x= NULL, y = "%")+
+#   theme_classic(base_size = 14)+
+#   theme(legend.position="bottom")
+# a %>%
+#   ggplot(aes(x= grade, 
+#              y= perc, 
+#              fill= name,
+#              alpha= grade
+#              ))+
+#   geom_bar(stat = "identity",
+#            position=position_dodge(width=0.9))+
+#   scale_fill_brewer(palette = "Spectral")+
+#   labs(fill = NULL, alpha=NULL, x= NULL, y = "%")+
+#   theme_classic()+
+#   scale_alpha_discrete(range = c(0.7, 1),
+#                        labels= c("Any Grade", "Grade 3+"))+
+#   facet_wrap(. ~ day)
 ```
  
 
@@ -3194,6 +3263,93 @@ ht_list <- Heatmap(df, name = "change",
         col = colors)
 draw(ht_list, heatmap_legend_side = "bottom")
 ```
+
+
+## MVA
+```{r}
+cart3 <- cart2 %>% 
+  filter(is.na(Not_evaluable_at_90days)) %>%
+  mutate(gr3_cytopenia_30d = case_when(
+    gr3_cytopenia_30d == "NO"    ~ 0,
+    gr3_cytopenia_30d == "YES"   ~ 1
+  )) %>% 
+  mutate(gr3_cytopenia_90d = case_when(
+    gr3_cytopenia_90d == "NO"    ~ 0,
+    gr3_cytopenia_90d == "YES"   ~ 1
+  )) %>% 
+  mutate(
+         CRS_grade2 = case_when(
+           `Max CRS grade (0-5)` < 2                              ~ "No CRS or Grade < 2",
+           `Max CRS grade (0-5)` >= 2                             ~ "Grade ≥2"),
+         CRS_grade2 = factor(CRS_grade2, levels = c("No CRS or Grade < 2", "Grade ≥2"))
+  )
+
+# glm(gr3_cytopenia_30d ~ `High Marrow Burden? (yes=1, no=0)` + `gr3_cytopenia_-5d` + CRS_grade2 + `Steroid use (Yes=1, No=0)` + `Number of prior lines of therapy`,
+#     data = cart3,
+#     family = "binomial") %>%
+#   tbl_regression(exponentiate = TRUE, 
+#                  intercept = TRUE) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 30**") %>%
+#   bold_p(t = .05) 
+# 
+# glm(gr3_cytopenia_90d ~ `High Marrow Burden? (yes=1, no=0)` + `gr3_cytopenia_-5d` + CRS_grade2 + `Steroid use (Yes=1, No=0)` + `Number of prior lines of therapy`,
+#     data = cart3,
+#     family = "binomial") %>%
+#   tbl_regression(exponentiate = TRUE, 
+#                  intercept = TRUE) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
+#   bold_p(t = .05) 
+# 
+# glm(gr3_cytopenia_30d ~ `High Marrow Burden? (yes=1, no=0)` + CRS_grade2 + `Steroid use (Yes=1, No=0)` + `Number of prior lines of therapy`,
+#     data = cart3,
+#     family = "binomial") %>%
+#   tbl_regression(exponentiate = TRUE, 
+#                  intercept = TRUE) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 30**") %>%
+#   bold_p(t = .05) 
+
+glm(gr3_cytopenia_90d ~ `High Marrow Burden? (yes=1, no=0)` + `gr3_cytopenia_-5d` + CRS_grade2 + `Steroid use (Yes=1, No=0)` + `Number of prior lines of therapy`,
+    data = cart3,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
+  bold_p(t = .05) 
+```
+
+```{r}
+forest_p <- 
+  glm(gr3_cytopenia_90d ~ `High Marrow Burden? (yes=1, no=0)` + `gr3_cytopenia_-5d` + CRS_grade2 + `Steroid use (Yes=1, No=0)` + `Number of prior lines of therapy`,
+    data = cart3,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  as_tibble() %>% 
+  `colnames<-`(str_remove_all(colnames(.), "\\*")) %>% 
+  fill(OR, `95% CI`, .direction = "up") %>% 
+  filter(!str_detect(Characteristic, "YES|NO|CRS_grade2|No CRS")) %>% 
+  separate(`95% CI`, into = c("lower", "upper"), sep = ", ") %>% 
+  mutate_at(c("OR", "lower", "upper"), ~ as.numeric(.)) %>% 
+  mutate(name= c("High marrow burden (≥50%)",
+                 "Grade ≥ 3 Cytopenia at Day -5",
+                 "Grade ≥ 2 CRS",
+                 "Steroid use",
+                 "Number of prior lines of therapy"
+                 ))
+
+ggplot(data=forest_p, aes(y=name, x=OR, xmin=lower, xmax=upper)) +
+  geom_point() + 
+  geom_errorbarh(height=.1) +
+  geom_vline(xintercept=1, color='black', linetype='dashed', alpha=.5) +
+  theme_classic()+
+  scale_x_log10(breaks = c(0, 0.25, 0.5, 1, 2.5, 5, 10, 40))+
+  labs(y="")
+```
+
+
 
 
 ```{r, fig.width=15, fig.height=12}
