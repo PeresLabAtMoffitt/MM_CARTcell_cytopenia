@@ -1,0 +1,1408 @@
+---
+title: "Manuscript analyses"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+<style type= "text/css">
+
+.## Figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+## Table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library}
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(gtsummary)
+library(labelled)
+library(DescTools)
+library(patchwork)
+library(ggbreak)
+# library(survival)
+library(survminer)
+theme_set(theme_classic())
+theme_gtsummary_compact()
+```
+
+```{r load}
+# path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Cytopenias")
+
+Characteristics <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "CHARACTERISTICS AND OUTCOMES ", skip = 1)
+Counts <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "COUNTS")
+Infections <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "INFECTIONS")
+Support <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "SUPPORT")
+Pneumo_titers <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "BACTERIAL AND VIRAL TITERS")
+Apheresis <- 
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+                    sheet = "APHERESIS")
+```
+
+
+
+```{r join}
+cart <- full_join(Characteristics, Counts, by = "PT Identifier") %>% 
+  full_join(., Infections, by = "PT Identifier") %>% 
+  full_join(., Support, by = "PT Identifier") %>% 
+  full_join(., Pneumo_titers, by = "PT Identifier") %>% 
+  # select(-`Date of leukapheresis.y`, `Date of leukapheresis` = `Date of leukapheresis.x`) %>% 
+  full_join(., Apheresis, by = "PT Identifier") %>% 
+  janitor::clean_names()
+```
+
+```{r exploratory function}
+# check_data <- function(data){
+#   
+#   for(i in 1:length(colnames(data))) {
+#     
+#     if(class(data[[i]]) == "factor" | class(data[[i]]) == "character") {
+#       
+#       # print(data[i])
+#       print(colnames(data[i]))
+#       print(table(data[[i]]))
+#     }
+#     
+#   }
+# }
+# 
+# check_data(cart[2:50])
+# check_data(cart[51:100])
+# check_data(cart[101:150])
+# check_data(cart[151:200]) # has < : "CRP Pre-Leukapheresis", "IgG day -5", "IgA day -5", "IgM day -5"
+# check_data(cart[201:250]) # has < :"CRP day +21", "IgG day +30", "IgA day +30", "IgM day +30", "marrow_percent_cd138_day_30", "marrow % cellularity day +30", "CRP day +30", "CD19 day +90", "IgG day +90", "IgA day +90", "IgM day +90", "marrow %CD138 day +90", 
+# # has > : "CD8 day +30", "CRP day +90"
+# check_data(cart[251:300]) # has < : "CD19 day +180", "IgG day +180", "IgA day +180", "IgM day +180", "marrow % cellularity day +180", "CRP day +180"
+# # has > : "marrow %CD138 day +180"
+# check_data(cart[1:44, 301:353]) # need to see patient in Moffitt
+```
+
+
+```{r data cleaning}
+cart <- cart %>% 
+  # Fix letter case and missing
+  mutate(across(where(is.character), ~ str_replace(., "NE|ND|N/A|Not done", NA_character_))) %>%
+  mutate(across(c(where(is.character),
+                  -c("r_iss_at_car_t_infusion")), 
+                ~ str_to_sentence(.) )) %>%
+  mutate(across(where(is.character), ~ str_replace(., "Unknown|unknown", NA_character_))) %>%
+  # Create site variable
+  mutate(site = case_when(
+    str_detect(pt_identifier, "MCC") ~ "Moffitt",
+    str_detect(pt_identifier, "CCT") ~ "Stanford",
+    str_detect(pt_identifier, "KUMC") ~ "KUMC",
+    str_detect(pt_identifier, "MDA") ~ "MD Anderson?",
+    str_detect(pt_identifier, "Utah") ~ "Utah"
+  )) %>%
+  
+  mutate(across(c("bm_plasma_cell_percent_at_pre_ld",
+                  "high_marrow_burden_50_percent",
+                  "marrow_percent_cd138_day_30",
+                  # "marrow fibrosis day +30 (0, 1, 2, 3)",
+                  # "marrow dysplasia day +30 (yes/no)"
+                  "marrow_cellularity_baseline_normo_hypo_hyper",
+                  "marrow_cellularity_day_30_normo_hypo_hyper",
+                  "marrow_cellularity_day_90_normo_hypo_hyper",
+                  "marrow_fibrosis_baseline_0_1_2_3",
+                  "marrow_fibrosis_day_30_0_1_2_3",
+                  "marrow_fibrosis_day_90_0_1_2_3",
+                  "marrow_fibrosis_day_180_0_1_2_3",
+                  "marrow_percent_cellularity_day_90",
+                  # "marrow dysplasia day +90 (yes/no)",
+                  "b2_microglobulin_day_180"), 
+                ~ str_replace(., "Suboptimal", NA_character_))) %>%
+  mutate(across(c("response_to_bridging_chemotherapy"), 
+                ~ str_replace(., "Not evaluable", NA_character_)))
+  # Marrow ----
+cart1 <- cart %>% 
+  mutate(marrow_cellularity_baseline_normo_hypo_hyper = case_when(
+    marrow_cellularity_baseline_normo_hypo_hyper == "\"patchy\""                 ~ "hyper",
+    TRUE                                                          ~ marrow_cellularity_baseline_normo_hypo_hyper
+  )) %>%
+  mutate(marrow_cellularity_day_30_normo_hypo_hyper = case_when(
+    marrow_cellularity_day_30_normo_hypo_hyper == "aplastic"                    ~ "hypo",
+    TRUE                                                          ~ marrow_cellularity_day_30_normo_hypo_hyper
+  )) %>%
+  # Separate variable cellularity
+  mutate(across(c(starts_with("marrow_cellularity_") & ends_with("normo_hypo_hyper")), ~ case_when(
+    . == "Variable"                         ~ "Yes"
+  ), .names = "is_variable_{.col}")) %>% 
+  mutate(across(c(starts_with("marrow_cellularity_") & ends_with("normo_hypo_hyper")), ~ case_when(
+    . == "Pauci"                            ~ "Hypo",
+    . == "Variable"                         ~ NA_character_,
+    TRUE                                    ~ .
+  ))) %>% 
+  
+  mutate(across(c(starts_with("marrow_dysplasia_") & ends_with("yes_no")), ~ case_when(
+    . == "0"                                ~ "No",
+    . == "1"                                ~ "Yes",
+    TRUE                                    ~ .
+  ))) %>% 
+  # mutate(marrow_percent_cellularity_day_30 = as.numeric(marrow_percent_cellularity_day_30)) %>% 
+  # mutate(marrow_percent_cellularity_day_90 = as.numeric(marrow_percent_cellularity_day_90)) %>% 
+  
+  # Age categories----
+  mutate(agecat = case_when(
+    age < 65                            ~ "< 65 years",
+    age >= 65                           ~ "≥ 65 years"
+  ),
+  agecat = factor(agecat, levels = c("< 65 years", "≥ 65 years"))
+  ) %>% 
+  # Sex categories----
+  mutate(sex = case_when(
+    str_detect(sex, "M")                                          ~ "Male",
+    TRUE                                                          ~ "Female"
+  )) %>% 
+  mutate(male_sex = case_when(
+    str_detect(sex, "M")                                          ~ 1,
+    TRUE                                                          ~ 0
+  )) %>% 
+  # Convert 0/1 to No/Yes----
+  mutate_at(c(
+              # "bm_plasma_cell_percent_at_pre_ld",
+              # "high_marrow_burden_50_percent",
+              # "ECOG > or = 2? (Yes, No)",
+              # deletion_17p_prior_to_car_t_infusion_yes_no,
+              # "t_4_14_prior_to_car_t_infusion_yes_no",
+              # "t_14_16_prior_to_car_t_infusion_yes_no",
+              # "steroid_use_yes_no", "tocilizumab_yes_no", "anakinra_yes_no",
+              # "Bridging Therapy (Yes=1, No=0)",
+              # "Received alkylating therapy with bridging (Yes=1, No=0)",
+              # "Prior auto SCT (yes, no)",
+              # "Prior Allo SCT within 6 months before apheresis",
+              # "Prior treatment with any gene therapy-based therapeutic or investigational cellular therapy or BCMA targeted therapy (Yes, No)",
+              "need_for_g_csf_post_infus_yes_1_no_0",
+              "need_for_ivig_yes_1_no_0",
+              "cd34_stem_cell_boost_yes_1_no_0",
+              "rbc_transfusion_within_30d_post_cart_yes_1_no_0", "plt_transfusion_within_30d_post_cart_yes_1_no_0", 
+              "rbc_transfusion_30d_post_cart_yes_1_no_0", "plt_transfusion_30d_post_cart_yes_1_no_0"), 
+            ~ case_when(
+              . == 1                                              ~ "Yes",
+              . == 0                                              ~ "No",
+              TRUE                                                ~ NA_character_
+            )) %>% 
+  # ECOG
+  # mutate(ecog_at_ld = case_when(
+  #   ecog_at_ld == 0 | 
+  #     ecog_at_ld == 1                       ~ "0-1",
+  #   TRUE                                                          ~ ecog_at_ld
+  # )) %>% 
+  
+  # Cytogenetics ----
+  mutate(cytogenetics = case_when(
+    deletion_17p_prior_to_car_t_infusion_yes_no == "Yes" | 
+      t_4_14_prior_to_car_t_infusion_yes_no == "Yes" | 
+      t_14_16_prior_to_car_t_infusion_yes_no == "Yes"             ~ "Yes",
+    deletion_17p_prior_to_car_t_infusion_yes_no == "No" &
+      t_4_14_prior_to_car_t_infusion_yes_no == "No" &
+      t_14_16_prior_to_car_t_infusion_yes_no == "No"               ~ "No",
+    TRUE                                                           ~ NA_character_
+  )) %>% 
+  
+  # Refractory status ----
+  mutate(immuno = case_when(
+    lenalidomide_exposed_vs_refractory_vs_not_exposed == "Refractory" |
+      pomalidomide_exposed_vs_refractory_vs_not_exposed == "Refractory"           ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(proteasome = case_when(
+    bortezomib_exposed_vs_refractory_vs_not_exposed == "Refractory" |
+      carfilzomib_exposed_vs_refractory_vs_not_exposed == "Refractory"            ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(dara = case_when(
+    daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed == "Refractory"            ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(doubleref = case_when(
+    proteasome == "Yes" &
+      immuno == "Yes"                                              ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(tripleref = case_when(
+    proteasome == "Yes" &
+      immuno == "Yes" &
+      daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed == "Refractory"          ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(pentaref = case_when(
+    bortezomib_exposed_vs_refractory_vs_not_exposed == "Refractory" & 
+      carfilzomib_exposed_vs_refractory_vs_not_exposed == "Refractory" &
+      lenalidomide_exposed_vs_refractory_vs_not_exposed == "Refractory" & 
+      pomalidomide_exposed_vs_refractory_vs_not_exposed == "Refractory" & 
+      daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed == "Refractory"          ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(number_prior_lines_therapy = case_when(
+    number_of_prior_lines_of_therapy <= 4                        ~ "≤ 4",
+    number_of_prior_lines_of_therapy > 4                         ~ "> 4"
+  )) %>%
+  
+  # CRS ----
+  # censored days > 100 to 100
+  # mutate(across(c(`Day of onset of CRS relative to infusion`,
+  #                 `Day of Max CRS (relative to infusion)`,
+  #                 `Day of onset of ICANS relative to infusion`,
+  #                 `Day of Max ICANS (relative to infusion)`), ~ case_when(
+  #   . > 100                                                       ~ 100,
+  #   TRUE                                                          ~ as.numeric(.)
+  # ))) %>% 
+  mutate(CRS_any = ifelse(max_crs_grade_0_5 == 0, "No", "Yes"),
+       CRS_any2 = ifelse(CRS_any == "No", 0, 1),
+       CRS_gradecat = case_when(
+         max_crs_grade_0_5 == 0                             ~ "No CRS",
+         max_crs_grade_0_5 == 1                             ~ "Grade 1 or 2",
+         max_crs_grade_0_5 == 2                             ~ "Grade 1 or 2",
+         max_crs_grade_0_5 >= 3                             ~ "Grade ≥3"),
+       CRS_gradecat = factor(CRS_gradecat, levels = c("No CRS", "Grade 1 or 2", "Grade ≥3")),
+       gr3_CRS = case_when(
+         max_crs_grade_0_5 %in% c(0:2)                      ~ "Grade <3",
+         max_crs_grade_0_5 %in% c(3:5)                      ~ "Grade ≥3",
+         TRUE                                                   ~ NA_character_
+       )) %>% 
+  mutate(gr2_CRS = case_when(
+    max_crs_grade_0_5 %in% c(0:1)                      ~ "Grade <2",
+    max_crs_grade_0_5 %in% c(2:5)                      ~ "Grade ≥2",
+    TRUE                                               ~ NA_character_
+  )) %>%
+  mutate(day_of_onset_crs_relative_to_infusion = 
+           interval(start = date_of_car_t_infusion, end = date_of_onset_of_crs) /
+           duration(n =1, unit = "days")
+  ) %>% 
+  mutate(day_of_max_crs_relative_to_infusion = 
+           interval(start = date_of_car_t_infusion, end = date_of_max_crs) /
+           duration(n =1, unit = "days")
+  ) %>% 
+  mutate(day_of_onset_icans_relative_to_infusion = 
+           interval(start = date_of_car_t_infusion, end = date_of_onset_of_icans) /
+           duration(n =1, unit = "days")
+  ) %>% 
+  mutate(day_of_max_icans_relative_to_infusion = 
+           interval(start = date_of_car_t_infusion, end = date_of_max_icans) /
+           duration(n =1, unit = "days")
+  ) %>% 
+
+  # ICANS 
+  mutate(ICANS_any = ifelse(max_icans == 0, "No", "Yes"),
+       ICANS_any2 = ifelse(ICANS_any == "No", 0, 1),
+       ICANS_gradecat = case_when(
+         max_icans == 0                                ~ "No ICANS",
+         max_icans == 1                                ~ "Grade 1 or 2",
+         max_icans == 2                                ~ "Grade 1 or 2",
+         max_icans >= 3                                ~ "Grade ≥3"),
+       ICANS_gradecat = factor(ICANS_gradecat, levels = c("No ICANS", "Grade 1 or 2", "Grade ≥3")),
+       gr3_ICANS = case_when(
+         max_icans %in% c(0:2)                         ~ "Grade <3",
+         max_icans %in% c(3:5)                         ~ "Grade ≥3",
+         TRUE                                          ~ NA_character_
+       )) %>% 
+  mutate(gr2_ICANS = case_when(
+    max_icans %in% c(0:1)                              ~ "Grade <2",
+    max_icans %in% c(2:5)                              ~ "Grade ≥2",
+    TRUE                                               ~ NA_character_
+  )) %>% 
+  
+  # Infection ----
+  mutate(any_infection = infection_yes_1_no_0
+  ) %>% 
+  mutate(any_sevinfection = severe_infection_need_for_iv_antibiotics_and_or_hospitalization_yes_1_no_0
+  )
+  
+
+  # mutate(access_type = case_when(
+  #   access_type == "Femoral"                                    ~ "Non-tunneled",
+  #   access_type == "AVF"                                        ~ "Peripheral",
+  #   TRUE                                                          ~ access_type
+  # )) %>% 
+cart1 <- cart1 %>% 
+  # Leukopenia ----
+  mutate(Leukopenia_apheresis = case_when(
+    wbc_apheresis < 4                                           ~ "Yes",
+    is.na(wbc_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`Leukopenia_-5d` = case_when(
+    wbc_day_5 < 4                                               ~ "Yes",
+    is.na(wbc_day_5)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_0d = case_when(
+    wbc_day_0_k_u_l < 4                                         ~ "Yes",
+    is.na(wbc_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_7d = case_when(
+    wbc_day_7 < 4                                               ~ "Yes",
+    is.na(wbc_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_14d = case_when(
+    wbc_day_14 < 4                                              ~ "Yes",
+    is.na(wbc_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_21d = case_when(
+    wbc_day_21 < 4                                              ~ "Yes",
+    is.na(wbc_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_30d = case_when(
+    wbc_day_30 < 4                                              ~ "Yes",
+    is.na(wbc_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  # mutate(Leukopenia_60d = case_when(
+  #   wbc_day_60 < 4                                             ~ "Yes",
+  #   is.na(wbc_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>% 
+  mutate(Leukopenia_90d = case_when(
+    wbc_day_90 < 4                                              ~ "Yes",
+    is.na(wbc_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Leukopenia_180d = case_when(
+    wbc_day_180 < 4                                             ~ "Yes",
+    is.na(wbc_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_apheresis = case_when(
+    wbc_apheresis < 2                                           ~ "Yes",
+    is.na(wbc_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`gr3_Leukopenia_-5d` = case_when(
+    wbc_day_5 < 2                                               ~ "Yes",
+    is.na(wbc_day_5)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_0d = case_when(
+    wbc_day_0_k_u_l < 2                                         ~ "Yes",
+    is.na(wbc_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_7d = case_when(
+    wbc_day_7 < 2                                               ~ "Yes",
+    is.na(wbc_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_14d = case_when(
+    wbc_day_14 < 2                                              ~ "Yes",
+    is.na(wbc_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_21d = case_when(
+    wbc_day_21 < 2                                              ~ "Yes",
+    is.na(wbc_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_30d = case_when(
+    wbc_day_30 < 2                                              ~ "Yes",
+    is.na(wbc_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  # mutate(gr3_Leukopenia_60d = case_when(
+  #   wbc_day_60 < 2                                             ~ "Yes",
+  #   is.na(wbc_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>% 
+  mutate(gr3_Leukopenia_90d = case_when(
+    wbc_day_90 < 2                                              ~ "Yes",
+    is.na(wbc_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Leukopenia_180d = case_when(
+    wbc_day_180 < 2                                             ~ "Yes",
+    is.na(wbc_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  
+  # Neutropenia ----
+  mutate(Neutropenia_apheresis = case_when(
+    anc_apheresis < 1.8                                         ~ "Yes",
+    is.na(anc_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`Neutropenia_-5d` = case_when(
+    anc_day_5_k_ul < 1.8                                        ~ "Yes",
+    is.na(anc_day_5_k_ul)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_0d = case_when(
+    anc_day_0_k_u_l < 1.8                                       ~ "Yes",
+    is.na(anc_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_7d = case_when(
+    anc_day_7 < 1.8                                             ~ "Yes",
+    is.na(anc_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_14d = case_when(
+    anc_day_14 < 1.8                                            ~ "Yes",
+    is.na(anc_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_21d = case_when(
+    anc_day_21 < 1.8                                            ~ "Yes",
+    is.na(anc_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_30d = case_when(
+    anc_day_30 < 1.8                                            ~ "Yes",
+    is.na(anc_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  # mutate(Neutropenia_60d = case_when(
+  #   anc_day_60 < 1.8                                             ~ "Yes",
+  #   is.na(anc_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>% 
+  mutate(Neutropenia_90d = case_when(
+    anc_day_90 < 1.8                                            ~ "Yes",
+    is.na(anc_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_180d = case_when(
+    anc_day_180 < 1.8                                           ~ "Yes",
+    is.na(anc_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_apheresis = case_when(
+    anc_apheresis < 1                                           ~ "Yes",
+    is.na(anc_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`gr3_Neutropenia_-5d` = case_when(
+    anc_day_5_k_ul < 1                                          ~ "Yes",
+    is.na(anc_day_5_k_ul)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_0d = case_when(
+    anc_day_0_k_u_l < 1                                         ~ "Yes",
+    is.na(anc_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_7d = case_when(
+    anc_day_7 < 1                                               ~ "Yes",
+    is.na(anc_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_14d = case_when(
+    anc_day_14 < 1                                              ~ "Yes",
+    is.na(anc_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_21d = case_when(
+    anc_day_21 < 1                                              ~ "Yes",
+    is.na(anc_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_30d = case_when(
+    anc_day_30 < 1                                              ~ "Yes",
+    is.na(anc_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  # mutate(gr3_Neutropenia_60d = case_when(
+  #   anc_day_60 < 1                                             ~ "Yes",
+  #   is.na(anc_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>% 
+  mutate(gr3_Neutropenia_90d = case_when(
+    anc_day_90 < 1                                              ~ "Yes",
+    is.na(anc_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Neutropenia_180d = case_when(
+    anc_day_180 < 1                                             ~ "Yes",
+    is.na(anc_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_gr1 = case_when(
+    (anc_day_7 < 1.8 &
+       anc_day_7 > 1.5) |
+      (anc_day_30 < 1.8 &
+         anc_day_30 > 1.5) |
+      # (anc_day_60 < 1.8 &
+      #    anc_day_60 > 1.5) |
+      (anc_day_180 < 1.8 &
+         anc_day_180 > 1.5) |
+      (anc_day_90 < 1.8 &
+         anc_day_90 > 1.5)                                      ~ "Yes",
+    is.na(anc_day_7) |
+      is.na(anc_day_30) |
+      # is.na(anc_day_60) |
+      is.na(anc_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_gr2 = case_when(
+    (anc_day_7 < 1.5 &
+       anc_day_7 > 1) |
+      (anc_day_30 < 1.5 &
+         anc_day_30 > 1) |
+      (anc_day_180 < 1.5 &
+         anc_day_180 > 1) |
+      # (anc_day_60 < 1.5 &
+      #    anc_day_60 > 1) |
+      (anc_day_90 < 1.5 &
+         anc_day_90 > 1)                                        ~ "Yes",
+    is.na(anc_day_7) |
+      is.na(anc_day_30) |
+      # is.na(anc_day_60) |
+      is.na(anc_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Neutropenia_gr3 = case_when(
+    anc_day_7 < 1 |
+      anc_day_30 < 1 |
+      anc_day_180 < 1 |
+      # anc_day_60 < 1 |
+      anc_day_90 < 1                                            ~ "Yes",
+    is.na(anc_day_7) |
+      is.na(anc_day_30) |
+      is.na(anc_day_180) |
+      # is.na(anc_day_60) |
+      is.na(anc_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(any_neutropenia = case_when(
+    Neutropenia_gr1 == "Yes" |
+      Neutropenia_gr2 == "Yes" |
+      Neutropenia_gr3 == "Yes"                                  ~ "Yes",
+    is.na(Neutropenia_gr1) |
+      is.na(Neutropenia_gr2) |
+      is.na(Neutropenia_gr3)                                    ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(severe_neutro_30beyond = case_when(
+    anc_day_30 < 1 |
+    anc_day_180 < 1 |
+      # anc_day_60 < 1 |
+      anc_day_90 < 1                                            ~ "Yes",
+    is.na(anc_day_30) |
+    is.na(anc_day_180) |
+      # is.na(anc_day_60) |
+      is.na(anc_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  
+  # Anemia ----
+  mutate(Anemia_apheresis = case_when(
+    hb_apheresis < 11.4                                         ~ "Yes",
+    is.na(hb_apheresis)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`Anemia_-5d` = case_when(
+    hb_day_5 < 11.4                                             ~ "Yes",
+    is.na(hb_day_5)                                             ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_0d = case_when(
+    hb_day_0_k_u_l < 11.4                                       ~ "Yes",
+    is.na(hb_day_0_k_u_l)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_7d = case_when(
+    hb_day_7 < 11.4                                             ~ "Yes",
+    is.na(hb_day_7)                                             ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(Anemia_14d = case_when(
+    hb_day_14 < 11.4                                            ~ "Yes",
+    is.na(hb_day_14)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_21d = case_when(
+    hb_day_21 < 11.4                                            ~ "Yes",
+    is.na(hb_day_21)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_30d = case_when(
+    hb_day_30 < 11.4                                            ~ "Yes",
+    is.na(hb_day_30)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  # mutate(Anemia_60d = case_when(
+  #   hb_day_60 < 11.4                                             ~ "Yes",
+  #   is.na(hb_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>%
+  mutate(Anemia_90d = case_when(
+    hb_day_90 < 11.4                                            ~ "Yes",
+    is.na(hb_day_90)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%             
+  mutate(Anemia_180d = case_when(
+    hb_day_180 < 11.4                                           ~ "Yes",
+    is.na(hb_day_180)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_Anemia_apheresis = case_when(
+    hb_apheresis < 8                                            ~ "Yes",
+    is.na(hb_apheresis)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`gr3_Anemia_-5d` = case_when(
+    hb_day_5 < 8                                                ~ "Yes",
+    is.na(hb_day_5)                                             ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Anemia_0d = case_when(
+    hb_day_0_k_u_l < 8                                          ~ "Yes",
+    is.na(hb_day_0_k_u_l)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Anemia_7d = case_when(
+    hb_day_7 < 8                                                ~ "Yes",
+    is.na(hb_day_7)                                             ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_Anemia_14d = case_when(
+    hb_day_14 < 8                                               ~ "Yes",
+    is.na(hb_day_14)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Anemia_21d = case_when(
+    hb_day_21 < 8                                               ~ "Yes",
+    is.na(hb_day_21)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Anemia_30d = case_when(
+    hb_day_30 < 8                                               ~ "Yes",
+    is.na(hb_day_30)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  # mutate(gr3_Anemia_60d = case_when(
+  #   hb_day_60 < 8                                             ~ "Yes",
+  #   is.na(hb_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>%
+  mutate(gr3_Anemia_90d = case_when(
+    hb_day_90 < 8                                               ~ "Yes",
+    is.na(hb_day_90)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_Anemia_180d = case_when(
+    hb_day_180 < 8                                              ~ "Yes",
+    is.na(hb_day_180)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(Anemia_gr1 = case_when(
+    (hb_day_7 < 11.4 &
+       hb_day_7 > 10) |
+      (hb_day_30 < 11.4 &
+         hb_day_30 > 10) |
+      # (hb_day_60 < 11.4 &
+         # hb_day_60 > 10) |
+      (hb_day_180 < 11.4 &
+         hb_day_180 > 10) |
+      (hb_day_90 < 11.4 &
+         hb_day_90 > 10)                                        ~ "Yes",
+    is.na(hb_day_7) |
+      is.na(hb_day_30) |
+      # is.na(hb_day_60) |
+      is.na(hb_day_90)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_gr2 = case_when(
+    (hb_day_7 < 10 &
+       hb_day_7 > 8) |
+      (hb_day_30 < 10 &
+         hb_day_30 > 8) |
+      # (hb_day_60 < 10 &
+         # hb_day_60 > 8) |
+      (hb_day_180 < 10 &
+         hb_day_180 > 8) |
+      (hb_day_90 < 10 &
+         hb_day_90 > 8)                                         ~ "Yes",
+    is.na(hb_day_7) |
+      is.na(hb_day_30) |
+      # is.na(hb_day_60) |
+      is.na(hb_day_90)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Anemia_gr3 = case_when(
+    hb_day_7 < 8 |
+      hb_day_30 < 8 |
+      # hb_day_60 < 8 |
+      hb_day_180 < 8 |
+      hb_day_90 < 8                                             ~ "Yes",
+    is.na(hb_day_7) |
+      is.na(hb_day_30) |
+      # is.na(hb_day_60) |
+      is.na(hb_day_180) |
+      is.na(hb_day_90)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(severe_anemia_30beyond = case_when(
+    hb_day_30 < 8 |
+      # hb_day_60 < 8 |
+      hb_day_180 < 8 |
+      hb_day_90 < 8                                             ~ "Yes",
+    is.na(hb_day_30) |
+      # is.na(hb_day_60) |
+      is.na(hb_day_180) |
+      is.na(hb_day_90)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(any_anemia = case_when(
+    Anemia_gr1 == "Yes" |
+      Anemia_gr2 == "Yes" |
+      Anemia_gr3 == "Yes"                                       ~ "Yes",
+    is.na(Anemia_gr1) |
+      is.na(Anemia_gr2) |
+      is.na(Anemia_gr3)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  
+  # Thrombocytopenia----
+  mutate(Thrombocytopenia_apheresis = case_when(
+    plt_apheresis < 143                                         ~ "Yes",
+    is.na(plt_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`Thrombocytopenia_-5d` = case_when(
+    plt_day_5_k_ul < 143                                        ~ "Yes",
+    is.na(plt_day_5_k_ul)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_0d = case_when(
+    plt_day_0_k_u_l < 143                                       ~ "Yes",
+    is.na(plt_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_7d = case_when(
+    plt_day_7 < 143                                             ~ "Yes",
+    is.na(plt_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(Thrombocytopenia_14d = case_when(
+    plt_day_14 < 143                                            ~ "Yes",
+    is.na(plt_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_21d = case_when(
+    plt_day_21 < 143                                            ~ "Yes",
+    is.na(plt_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_30d = case_when(
+    plt_day_30 < 143                                            ~ "Yes",
+    is.na(plt_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  # mutate(Thrombocytopenia_60d = case_when(
+  #   plt_day_60 < 143                                             ~ "Yes",
+  #   is.na(plt_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>%
+  mutate(Thrombocytopenia_90d = case_when(
+    plt_day_90 < 143                                            ~ "Yes",
+    is.na(plt_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(Thrombocytopenia_180d = case_when(
+    plt_day_180 < 143                                           ~ "Yes",
+    is.na(plt_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_Thrombocytopenia_apheresis = case_when(
+    plt_apheresis < 50                                          ~ "Yes",
+    is.na(plt_apheresis)                                        ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`gr3_Thrombocytopenia_-5d` = case_when(
+    plt_day_5_k_ul < 50                                         ~ "Yes",
+    is.na(plt_day_5_k_ul)                                       ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Thrombocytopenia_0d = case_when(
+    plt_day_0_k_u_l < 50                                        ~ "Yes",
+    is.na(plt_day_0_k_u_l)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Thrombocytopenia_7d = case_when(
+    plt_day_7 < 50                                              ~ "Yes",
+    is.na(plt_day_7)                                            ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_Thrombocytopenia_14d = case_when(
+    plt_day_14 < 50                                             ~ "Yes",
+    is.na(plt_day_14)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Thrombocytopenia_21d = case_when(
+    plt_day_21 < 50                                             ~ "Yes",
+    is.na(plt_day_21)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Thrombocytopenia_30d = case_when(
+    plt_day_30 < 50                                             ~ "Yes",
+    is.na(plt_day_30)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  # mutate(gr3_Thrombocytopenia_60d = case_when(
+  #   plt_day_60 < 50                                             ~ "Yes",
+  #   is.na(plt_day_60)                                          ~ NA_character_,
+  #   TRUE                                                          ~ "No"
+  # )) %>%
+  mutate(gr3_Thrombocytopenia_90d = case_when(
+    plt_day_90 < 50                                             ~ "Yes",
+    is.na(plt_day_90)                                           ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_Thrombocytopenia_180d = case_when(
+    plt_day_180 < 50                                            ~ "Yes",
+    is.na(plt_day_180)                                          ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_gr1 = case_when(
+    (plt_day_7 < 143 &
+       plt_day_7 > 75) |
+      (plt_day_30 < 143 &
+         plt_day_30 > 75) |
+      # (plt_day_60 < 143 &
+         # plt_day_60 > 75) |
+      (plt_day_180 < 143 &
+         plt_day_180 > 75) |
+      (plt_day_90 < 143 &
+         plt_day_90 > 75)                                       ~ "Yes",
+    is.na(plt_day_7) |
+      is.na(plt_day_30) |
+      # is.na(plt_day_60) |
+      is.na(plt_day_180) |
+      is.na(plt_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_gr2 = case_when(
+    (plt_day_7 < 75 &
+       plt_day_7 > 50) |
+      (plt_day_30 < 75 &
+         plt_day_30 > 50) |
+      # (plt_day_60 < 75 &
+         # plt_day_60 > 50) |
+      (plt_day_180 < 75 &
+         plt_day_180 > 50) |
+      (plt_day_90 < 75 &
+         plt_day_90 > 50)                                       ~ "Yes",
+    is.na(plt_day_7) |
+      is.na(plt_day_30) |
+      # is.na(plt_day_60) |
+      is.na(plt_day_180) |
+      is.na(plt_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(Thrombocytopenia_gr3 = case_when(
+    plt_day_7 < 50 |
+      plt_day_30 < 50 |
+      # plt_day_60 < 50 |
+      plt_day_180 < 50 |
+      plt_day_90 < 50                                           ~ "Yes",
+    is.na(plt_day_7) |
+      is.na(plt_day_30) |
+      is.na(plt_day_180) |
+      # is.na(plt_day_60) |
+      is.na(plt_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(severe_throm_30beyond = case_when(
+    plt_day_30 < 50 |
+      # plt_day_60 < 50 |
+      plt_day_180 < 50 |
+      plt_day_90 < 50                                           ~ "Yes",
+    is.na(plt_day_30) |
+      # is.na(plt_day_60) |
+      is.na(plt_day_180) |
+      is.na(plt_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(any_thrombo = case_when(
+    Thrombocytopenia_gr1 == "Yes" |
+      Thrombocytopenia_gr2 == "Yes" |
+      Thrombocytopenia_gr3 == "Yes"                             ~ "Yes",
+    is.na(Thrombocytopenia_gr1) |
+      is.na(Thrombocytopenia_gr2) |
+      is.na(Thrombocytopenia_gr3)                               ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  
+  # Cytopenia ----
+  mutate(cytopenia_apheresis = case_when(
+    wbc_apheresis < 4 | 
+      anc_apheresis < 1.8 | 
+      hb_apheresis < 11.4 | 
+      plt_apheresis < 143                                       ~ "Yes",
+    is.na(wbc_apheresis) |
+      is.na(anc_apheresis) |
+      is.na(hb_apheresis) |
+      is.na(plt_apheresis)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`cytopenia_-5d` = case_when(
+    wbc_day_5 < 4 | 
+      anc_day_5_k_ul < 1.8 | 
+      hb_day_5 < 11.4 | 
+      plt_day_5_k_ul < 143                                      ~ "Yes",
+    is.na(wbc_day_5) |
+      is.na(anc_day_5_k_ul) |
+      is.na(hb_day_5) |
+      is.na(plt_day_5_k_ul)                                     ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(cytopenia_0d = case_when(
+    wbc_day_0_k_u_l < 4 | 
+      anc_day_0_k_u_l < 1.8 | 
+      hb_day_0_k_u_l < 11.4 | 
+      plt_day_0_k_u_l < 143                                     ~ "Yes",
+    is.na(wbc_day_0_k_u_l) |
+      is.na(anc_day_0_k_u_l) |
+      is.na(hb_day_0_k_u_l) |
+      is.na(plt_day_0_k_u_l)                                    ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(cytopenia_d7 = case_when(
+    Anemia_7d == "Yes" | Thrombocytopenia_7d == "Yes" | 
+      Neutropenia_7d == "Yes"                                   ~ "Yes",
+    is.na(Anemia_7d) | is.na(Thrombocytopenia_7d) | 
+      is.na(Neutropenia_7d)                                     ~ NA_character_,
+    TRUE ~ "No"
+  )) %>%
+  mutate(cytopenia_14d = case_when(
+    wbc_day_14 < 4 | 
+      anc_day_14 < 1.8 | 
+      hb_day_14 < 11.4 | 
+      plt_day_14 < 143                                          ~ "Yes",
+    is.na(wbc_day_14) |
+      is.na(anc_day_14) |
+      is.na(hb_day_14) |
+      is.na(plt_day_14)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(cytopenia_21d = case_when(
+    wbc_day_21 < 4 | 
+      anc_day_21 < 1.8 | 
+      hb_day_21 < 11.4 | 
+      plt_day_21 < 143                                          ~ "Yes",
+    is.na(wbc_day_21) |
+      is.na(anc_day_21) |
+      is.na(hb_day_21) |
+      is.na(plt_day_21)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(cytopenia_d30 = case_when(
+    Anemia_30d == "Yes" | Thrombocytopenia_30d == "Yes" | 
+      Neutropenia_30d == "Yes"                                  ~ "Yes",
+    is.na(Anemia_30d) | is.na(Thrombocytopenia_30d) | 
+      is.na(Neutropenia_30d)                                    ~ NA_character_,
+    TRUE ~ "No"
+  )) %>%
+  # mutate(cytopenia_d60 = case_when(
+  #   Anemia_60d == "Yes" | Thrombocytopenia_60d == "Yes" | Neutropenia_60d == "Yes" ~ "Yes",
+  #   is.na(Anemia_60d) | is.na(Thrombocytopenia_60d) | is.na(Neutropenia_60d) ~ NA_character_,
+  #   TRUE ~ "No"
+  # )) %>%
+  mutate(cytopenia_d90 = case_when(
+    Anemia_90d == "Yes" | Thrombocytopenia_90d == "Yes" | 
+      Neutropenia_90d == "Yes"                                  ~ "Yes",
+    is.na(Anemia_90d) | is.na(Thrombocytopenia_90d) | 
+      is.na(Neutropenia_90d)                                    ~ NA_character_,
+    TRUE ~ "No"
+  )) %>%
+  mutate(cytopenia_d180 = case_when(
+    Anemia_180d == "Yes" | Thrombocytopenia_180d == "Yes" | 
+      Neutropenia_180d == "Yes"                                 ~ "Yes",
+    is.na(Anemia_180d) | is.na(Thrombocytopenia_180d) | 
+      is.na(Neutropenia_180d)                                   ~ NA_character_,
+    TRUE ~ "No"
+  )) %>%
+  
+  mutate(`gr3_cytopenia_≥30d` = case_when(
+    anc_day_30 < 1 |
+      hb_day_30 < 8 |
+      plt_day_30 < 50 |
+      # anc_day_60 < 1 |
+      # hb_day_60 < 8 |
+      # plt_day_60 < 50 |
+      anc_day_180 < 1 |
+      hb_day_180 < 8 |
+      plt_day_180 < 50 |
+      anc_day_90 < 1 |
+      hb_day_90 < 8 |
+      plt_day_90 < 50                                           ~ "Yes",
+    is.na(anc_day_30) |
+      is.na(hb_day_30) |
+      is.na(plt_day_30) |
+      # is.na(anc_day_60) |
+      # is.na(hb_day_60) |
+      # is.na(plt_day_60) |
+      is.na(anc_day_180) |
+      is.na(hb_day_180) |
+      is.na(plt_day_180) |
+      is.na(anc_day_90) |
+      is.na(hb_day_90) |
+      is.na(plt_day_90)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+   mutate(gr3_cytopenia_apheresis = case_when(
+    wbc_apheresis < 2 | 
+      anc_apheresis < 1 | 
+      hb_apheresis < 8 | 
+      plt_apheresis < 50                                        ~ "Yes",
+    is.na(wbc_apheresis) |
+      is.na(anc_apheresis) |
+      is.na(hb_apheresis) |
+      is.na(plt_apheresis)                                      ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(`gr3_cytopenia_-5d` = case_when(
+    wbc_day_5 < 2 | 
+      anc_day_5_k_ul < 1 | 
+      hb_day_5 < 8 | 
+      plt_day_5_k_ul < 50                                       ~ "Yes",
+    is.na(wbc_day_5) |
+      is.na(anc_day_5_k_ul) |
+      is.na(hb_day_5) |
+      is.na(plt_day_5_k_ul)                                     ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_cytopenia_0d = case_when(
+    wbc_day_0_k_u_l < 2 | 
+      anc_day_0_k_u_l < 1 | 
+      hb_day_0_k_u_l < 8 | 
+      plt_day_0_k_u_l < 50                                      ~ "Yes",
+    is.na(wbc_day_0_k_u_l) |
+      is.na(anc_day_0_k_u_l) |
+      is.na(hb_day_0_k_u_l) |
+      is.na(plt_day_0_k_u_l)                                    ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_cytopenia_d7 = case_when(
+    gr3_Anemia_7d == "Yes" | gr3_Thrombocytopenia_7d == "Yes" | 
+      gr3_Neutropenia_7d == "Yes"                               ~ "Yes",
+    is.na(gr3_Anemia_7d) | is.na(gr3_Thrombocytopenia_7d) | 
+      is.na(gr3_Neutropenia_7d)                                 ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  mutate(gr3_cytopenia_14d = case_when(
+    wbc_day_14 < 2 | 
+      anc_day_14 < 1 | 
+      hb_day_14 < 8 | 
+      plt_day_14 < 50                                           ~ "Yes",
+    is.na(wbc_day_14) |
+      is.na(anc_day_14) |
+      is.na(hb_day_14) |
+      is.na(plt_day_14)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_cytopenia_21d = case_when(
+    wbc_day_21 < 2 | 
+      anc_day_21 < 1 | 
+      hb_day_21 < 8 | 
+      plt_day_21 < 50                                           ~ "Yes",
+    is.na(wbc_day_21) |
+      is.na(anc_day_21) |
+      is.na(hb_day_21) |
+      is.na(plt_day_21)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_cytopenia_d30 = case_when(
+    gr3_Anemia_30d == "Yes" | gr3_Thrombocytopenia_30d == "Yes" | 
+      gr3_Neutropenia_30d == "Yes"                              ~ "Yes",
+    is.na(gr3_Anemia_30d) | is.na(gr3_Thrombocytopenia_30d) | 
+      is.na(gr3_Neutropenia_30d)                                ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>%
+  # mutate(gr3_cytopenia_d60 = case_when(
+  #   gr3_Anemia_60d == "Yes" | gr3_Thrombocytopenia_60d == "Yes" | gr3_Neutropenia_60d == "Yes" ~ "Yes",
+  #   is.na(gr3_Anemia_60d) | is.na(gr3_Thrombocytopenia_60d) | is.na(gr3_Neutropenia_60d) ~ NA_character_,
+  #   TRUE ~ "No"
+  # )) %>%
+  mutate(gr3_cytopenia_d90 = case_when(
+    gr3_Anemia_90d == "Yes" | gr3_Thrombocytopenia_90d == "Yes" | 
+      gr3_Neutropenia_90d == "Yes"                              ~ "Yes",
+    is.na(gr3_Anemia_90d) | is.na(gr3_Thrombocytopenia_90d) | 
+      is.na(gr3_Neutropenia_90d)                                ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) %>% 
+  mutate(gr3_cytopenia_d180 = case_when(
+    gr3_Anemia_180d == "Yes" | gr3_Thrombocytopenia_180d == "Yes" |
+      gr3_Neutropenia_180d == "Yes"                             ~ "Yes",
+    is.na(gr3_Anemia_180d) | is.na(gr3_Thrombocytopenia_180d) |
+      is.na(gr3_Neutropenia_180d)                               ~ NA_character_,
+    TRUE                                                        ~ "No"
+  ))
+
+cart2 <- cart1 %>% 
+  # MRD----
+  mutate_at(c("day_30_mrd_by_clono_seq_positive_vs_negative",
+              "day_30_mrd_by_flow_positive_vs_negative",
+              "x3_month_mrd_by_clono_seq_positive_vs_negative",
+              "x3_month_mrd_by_flow_positive_vs_negative"),
+            ~ case_when(
+              . == "Positive"                                     ~ "Positive",
+              . == "Negative"                                     ~ "Negative",
+              TRUE                                                ~ NA_character_
+            )) %>%
+  mutate(MRD_30days = coalesce(day_30_mrd_by_clono_seq_positive_vs_negative, 
+                               day_30_mrd_by_flow_positive_vs_negative
+  )) %>%
+  mutate(MRD_90days = coalesce(x3_month_mrd_by_clono_seq_positive_vs_negative,
+                               x3_month_mrd_by_flow_positive_vs_negative
+  )) %>%
+
+  # Day 30 response ----
+  mutate(day_30_response_s_cr_cr_vgpr_pr_sd_pd = case_when(
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "evaluable")   ~ NA_character_,
+    TRUE           ~ day_30_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(ORR_30days = case_when(
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "CR")   ~ "ORR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "PR")   ~ "ORR",
+    is.na(day_30_response_s_cr_cr_vgpr_pr_sd_pd)              ~ NA_character_,
+    TRUE                                                                        ~ "PD/SD/MR"
+  )) %>% 
+  mutate(day30_response = case_when(
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "VGPR")        ~ "VGPR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "PR")          ~ "PR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "sCR")	       ~ "sCR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	         ~ "CR",
+    is.na(day_30_response_s_cr_cr_vgpr_pr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ day_30_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(day30_response_group = case_when(
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "VGPR")        ~ "VGPR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "PR")          ~ "PR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	         ~ "CR or sCR",
+    is.na(day_30_response_s_cr_cr_vgpr_pr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ day_30_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(day30_response_sCRvsOthers = case_when(
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	         ~ "CR or sCR",
+    is.na(day_30_response_s_cr_cr_vgpr_pr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ "Others"
+  )) %>% 
+  # Day 90 response ----
+  mutate(x3_month_response_s_cr_cr_vgpr_pr_sd_pd = case_when(
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, 
+               "evaluable|done")                                     ~ NA_character_,
+    TRUE           ~ x3_month_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(ORR_90days = case_when(
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "CR")    ~ "ORR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "PR")    ~ "ORR",
+    is.na(x3_month_response_s_cr_cr_vgpr_pr_sd_pd)               ~ NA_character_,
+    TRUE                                                                        ~ "PD/SD/MR"
+  )) %>% 
+  mutate(day90_response_group = case_when(
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "VGPR")        ~ "VGPR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "PR")          ~ "PR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	        ~ "CR or sCR",
+    is.na(x3_month_response_s_cr_cr_vgpr_pr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ x3_month_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(day90_response = case_when(
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "VGPR")        ~ "VGPR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "PR")          ~ "PR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "sCR")	        ~ "sCR",
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	        ~ "CR",
+    is.na(x3_month_response_s_cr_cr_vgpr_pr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ x3_month_response_s_cr_cr_vgpr_pr_sd_pd
+  )) %>% 
+  mutate(day90_response_sCRvsOthers = case_when(
+    str_detect(x3_month_response_s_cr_cr_vgpr_pr_sd_pd, "CR")	         ~ "CR or sCR",
+    is.na(x3_month_response_s_cr_cr_vgpr_pr_sd_pd)                      ~ NA_character_,
+    TRUE           ~ "Others"
+  )) %>% 
+  # Best response
+  mutate(ORR_as_best_response = case_when(
+    ORR_30days == "ORR" |
+    ORR_90days == "ORR"                       ~ "ORR"
+  )) %>% 
+  mutate(best_response = case_when(
+    day30_response_group == "CR or sCR" |
+      day90_response_group == "CR or sCR"                                             ~ "CR or sCR",
+    day30_response_group == "VGPR" |
+      day90_response_group == "VGPR"                                                  ~ "VGPR",
+    day30_response_group == "PR" |
+      day90_response_group == "PR"                                                    ~ "PR",
+    TRUE                                                                        ~ NA_character_
+  )) %>% 
+  
+  mutate(MRDneg_in_best_response = case_when(
+    day_30_mrd_by_clono_seq_positive_vs_negative ==  "Negative" |
+      MRD_90days ==  "Negative"                     ~ "Negative",
+    day_30_mrd_by_clono_seq_positive_vs_negative ==  "Positive" |
+      MRD_90days ==  "Positive"                     ~ "Positive",
+    TRUE                             ~ NA_character_
+  ))
+  
+  # Titers ----
+  # mutate(ig_g_hsv1_2_apheresis = case_when(
+  #   ig_g_hsv1_2_apheresis < 0.9         ~ "Negative",
+  #   ig_g_hsv1_2_apheresis >= 0.9 &
+  #     ig_g_hsv1_2_apheresis < 1.10      ~ "Indeterminate",
+  #   ig_g_hsv1_2_apheresis >= 1.10       ~ "Positive",
+  # )) %>%
+  # mutate(ig_g_hsv1_2_d90 = case_when(
+  #   ig_g_hsv1_2_d90 < 0.9         ~ "Negative",
+  #   ig_g_hsv1_2_d90 >= 0.9 &
+  #     ig_g_hsv1_2_d90 < 1.10      ~ "Indeterminate",
+  #   ig_g_hsv1_2_d90 >= 1.10       ~ "Positive",
+  # )) %>% 
+  # mutate_at(c("ig_g_hsv1_2_apheresis",
+  #             "ig_g_hsv1_2_d90"),
+  #           ~ factor(., levels = c("Positive", "Indeterminate", "Negative"))) %>%
+  # 
+  # mutate_at(c("vzv_ig_g_apheresis",
+  #             "vzv_ig_g_d90",
+  #             "cmv_ig_g_apheresis",
+  #             "cmv_ig_g_d90"), 
+  #           ~ case_when(
+  #             . == 1                                              ~ "Positive",
+  #             . == 0                                              ~ "Negative",
+  #             . == "Equivocal"                                    ~ "Equivocal"
+  #           )) %>% 
+  # mutate_at(c("vzv_ig_g_apheresis",
+  #             "vzv_ig_g_d90",
+  #             "cmv_ig_g_apheresis",
+  #             "cmv_ig_g_d90"),
+  #           ~ factor(., levels = c("Positive", "Negative", "Equivocal"))) %>% 
+  # mutate(across(starts_with("Pneumo"), ~ case_when(
+  #   . <= 1                                                    ~ "Negative",
+  #   . > 1                                                     ~ "Positive"
+  # ))) %>% 
+
+#   mutate(igg_hsv_change = case_when(
+#     ig_g_hsv1_2_apheresis == "Positive" &
+#       ig_g_hsv1_2_d90 == "Negative"         ~ -1,
+#     ig_g_hsv1_2_apheresis == "Negative" &
+#       ig_g_hsv1_2_d90 == "Positive"         ~ 1,
+#     ig_g_hsv1_2_apheresis == "Negative" &
+#       ig_g_hsv1_2_d90 == "Negative"         ~ -0.25,
+#     ig_g_hsv1_2_apheresis == "Positive" &
+#       ig_g_hsv1_2_d90 == "Positive"         ~ 0.25
+#   )) %>% 
+#   mutate(igg_vzv_change = case_when(
+#     `vzv_ig_g_apheresis` == "Positive" &
+#       `vzv_ig_g_d90` == "Negative"               ~ -1,
+#     `vzv_ig_g_apheresis` == "Negative" &
+#       `vzv_ig_g_d90` == "Positive"               ~ 1,
+#     `vzv_ig_g_apheresis` == "Negative" &
+#       `vzv_ig_g_d90` == "Negative"               ~ -0.25,
+#     `vzv_ig_g_apheresis` == "Positive" &
+#       `vzv_ig_g_d90` == "Positive"               ~ 0.25
+#   )) %>% 
+#   mutate(igg_cmv_change = case_when(
+#     `cmv_ig_g_apheresis` == "Positive" &
+#       `cmv_ig_g_d90` == "Negative"               ~ -1,
+#     `cmv_ig_g_apheresis` == "Negative" &
+#       `cmv_ig_g_d90` == "Positive"               ~ 1,
+#     `cmv_ig_g_apheresis` == "Negative" &
+#       `cmv_ig_g_d90` == "Negative"               ~ -0.25,
+#     `cmv_ig_g_apheresis` == "Positive" &
+#       `cmv_ig_g_d90` == "Positive"               ~ 0.25
+#   ))
+#   
+# # Create Pneumo titers change value
+# for (i in colnames(cart1 %>%
+#                    select(c(starts_with("Pneumo"))))) {
+# 
+#   pneumo_type <-
+#     str_match(i, ".*(apheresis|D90)")[, 1] %>% 
+#     # str_replace_all(., " ", "_") %>% 
+#     str_remove(., " apheresis| D90")
+#   
+#   pneumo_subset <- cart1 %>% select(PT, starts_with(pneumo_type))
+#   
+#   pneumo_type <-
+#     str_replace_all(pneumo_type, " ", "_")
+#   # day <-
+#   #   str_match(i, ".*(apheresis|D90)")[, 2]
+#  
+#   name <- paste0(pneumo_type, "_", "change")
+# 
+#   cart1[[paste0(pneumo_type, "_", "change")]] <-  case_when(
+#     pneumo_subset[2] == "Positive" &
+#       pneumo_subset[3] == "Negative"               ~ -1,
+#     pneumo_subset[2] == "Negative" &
+#       pneumo_subset[3] == "Positive"               ~ 1,
+#     pneumo_subset[2] == "Negative" &
+#       pneumo_subset[3] == "Negative"               ~ -0.25,
+#     pneumo_subset[2] == "Positive" &
+#       pneumo_subset[3] == "Positive"               ~ 0.25
+#   )
+# }
+```
+
+
+```{r}
+## Labeling
+var_label(cart1) <- list(age = "Patient age", agecat = "Patient age - Categories", 
+                         extramedullary_disease_yes_no = "Extramedullary disease",
+                         # bm_plasma_cell_percent_at_pre_ld = "Circulating Plasma Cells?",
+                         high_marrow_burden_50_percent = "High marrow burden (≥50%)",
+                         # `ECOG > or = 2? (Yes, No)` ,
+                         r_iss_at_car_t_infusion = "ISS at cart infusion",
+                         cytogenetics = "High risk cytogenetics", 
+                         deletion_17p_prior_to_car_t_infusion_yes_no = "Deletion 17p at Infusion", 
+                         t_4_14_prior_to_car_t_infusion_yes_no = "t(4:14) at Infusion", 
+                         t_14_16_prior_to_car_t_infusion_yes_no = "t(4:16) at Infusion", 
+                         bridging_therapy_yes_no = "Bridging Therapy",
+                         prior_auto_sct_yes_no = "Prior autoSCT", 
+                         prior_allo_sct_within_6_months_before_apheresis = "Prior alloSCT",
+                         # prior_treatment_with_any_gene_therapy_based_therapeutic_or_investigational_cellular_therapy_or_bcma_targeted_therapy_yes_no = "Prior BCMA-directed therapy",
+                         # prior_treatment_with_any_gene_therapy_based_therapeutic_or_investigational_cellular_therapy_or_bcma_targeted_therapy_yes_no = "Prior BCMA-directed therapy ",
+                         # bmicat = "BMI at apheresis - Normal, Overweight, Obese", 
+                         proteasome = "Refractory to Proteasome Inhibitors", 
+                         lenalidomide_exposed_vs_refractory_vs_not_exposed = "Refractory to Lenalidomide",
+                         bortezomib_exposed_vs_refractory_vs_not_exposed = "Refractory to Bortezomib", 
+                         carfilzomib_exposed_vs_refractory_vs_not_exposed = "Refractory to Carfilzomib", 
+                         pomalidomide_exposed_vs_refractory_vs_not_exposed = "Refractory to Pomalidomide",
+                         dara = "Refractory to Daratumumab or Isatuximab",
+                         immuno = "Refractory to Immunomodulators", doubleref = "Double refractory", 
+                         tripleref= "Triple refractory", pentaref= "Penta refractory",
+                         # bmicat2 = "BMI at apheresis - Normal vs. Overweight/Obese", 
+                         CRS_any = "Any CRS", CRS_gradecat = "CRS Grade", 
+                         ICANS_any = "Any ICANS", ICANS_gradecat = "ICANS Grade", 
+                         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no =
+                           "Did patient meet cartitude criteria"#,
+                         # best_response = "Best response in first 90 days"
+) 
+
+```
+<br>
