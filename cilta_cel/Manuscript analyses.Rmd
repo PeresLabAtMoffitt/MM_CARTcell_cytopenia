@@ -16,12 +16,12 @@ editor_options:
 
 <style type= "text/css">
 
-.## Figure {
+. figure {
    margin-top: 25px;
    margin-bottom: 100px;
 }
 
-## Table {
+table {
     margin-top: 10px;
     margin-bottom: 25px;
 }
@@ -213,14 +213,12 @@ vec_col <- c("bm_plasma_cell_percent_at_pre_ld",
              "wbc_day_7", "plt_day_7",
              
              "ig_g_apheresis",
-             "ig_g_day_5", "ig_g_day_30", "ig_g_day_90",
-             "ig_a_day_5", "ig_a_day_30", "ig_a_day_90",
-             "ig_m_day_5", "ig_m_day_30", "ig_m_day_90",
+             "ig_g_day_5", "ig_g_day_30", "ig_g_day_90", "ig_g_day_180",
+             "ig_a_day_5", "ig_a_day_30", "ig_a_day_90", "ig_a_day_180",
+             "ig_m_day_5", "ig_m_day_30", "ig_m_day_90", "ig_m_day_180",
              
-             "cd8_apheresis", "cd8_day_30", 
-             "cd8_day_90", "cd8_day_180", 
-             "cd19_apheresis", "cd19_day_30",
-             "cd19_day_90", "cd19_day_180",
+             "cd8_apheresis", "cd8_day_30", "cd8_day_90", "cd8_day_180", 
+             "cd19_apheresis", "cd19_day_30", "cd19_day_90", "cd19_day_180",
              
              "ferritin_day_7", 
              "crp_pre_leukapheresis", "crp_day_0",
@@ -246,16 +244,17 @@ for (i in vec_col) {
       select(-c(wo_sign))
   }
 }
- 
-  
-  
-  
-# has < : "CRP Pre-Leukapheresis", "IgG day -5", "IgA day -5", "IgM day -5"
-# has < :"CRP day +21", "IgG day +30", "IgA day +30", "IgM day +30", "marrow_percent_cd138_day_30", "marrow % cellularity day +30", "CRP day +30", "CD19 day +90", "IgG day +90", "IgA day +90", "IgM day +90", "marrow %CD138 day +90", 
-# # has > : "CD8 day +30", "CRP day +90"
-# has < : "CD19 day +180", "IgG day +180", "IgA day +180", "IgM day +180", "marrow % cellularity day +180", "CRP day +180"
-# # has > : "marrow %CD138 day +180"  
-  
+```
+
+
+```{r fix neutropenia values}
+cart <- cart %>% 
+  mutate(across(c(starts_with("anc_"), 
+                  -anc_0_75_x_10_9_l_0_75_k_u_l), 
+                ~ . / 1000))
+```
+
+```{r data cleaning2}
 cart <- cart %>% 
   # Demographics ----
   rename_at(vars(contains("race")), ~ "race") %>% 
@@ -1759,6 +1758,9 @@ cilta <- cart6 %>%
     what_non_parkinsonian_neurotoxicity == 
       "Posterior reversible encephalopathy syndrome (PRES) and parkinsonism" 
                                                                   ~ "Parkinsonian/PRES",
+    what_non_parkinsonian_neurotoxicity == 
+      "Posterior reversible encephalopathy syndrome (pres); progressive multifocal leukoencephalopathy (pml)" 
+                                                                  ~ "PRES/PML",
     parkinsonian_neurotoxicity_yes_no == "Yes"                    ~ "Parkinsonian",
     other_delayed_non_parkinsonian_neurologic_toxicity_yes_no == "Yes" &
       str_detect(what_non_parkinsonian_neurotoxicity, "alsy")     ~ "Bell's palsy",
@@ -1779,7 +1781,7 @@ cilta <- cart6 %>%
                                                                   ~ "Polyneuropathy",
     other_delayed_non_parkinsonian_neurologic_toxicity_yes_no == "Yes" &
       is.na(what_non_parkinsonian_neurotoxicity)                  ~ "Unknown type",
-    TRUE                                                          ~ NA_character_
+    TRUE                                                          ~ what_non_parkinsonian_neurotoxicity
   )) 
 ```
 
@@ -1893,7 +1895,7 @@ var_label(cilta) <- list(age = "Patient age", agecat = "Patient age - Categories
                          high_marrow_burden_50_percent = "High marrow burden (≥50%)",
                          ecog_at_ld = "ECOG at LD",
                          # `ECOG > or = 2? (Yes, No)` ,
-                         r_iss_at_car_t_infusion = "ISS at cart infusion",
+                         r_iss_at_car_t_infusion = "R-ISS at cart infusion",
                          cytogenetics = "High risk cytogenetics", 
                          deletion_17p_prior_to_car_t_infusion_yes_no = "Deletion 17p at Infusion", 
                          t_4_14_prior_to_car_t_infusion_yes_no = "t(4:14) at Infusion", 
@@ -1997,7 +1999,7 @@ tbl_merge(list(day7, day14, day21, day30, day90, day180),
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  select(notinfused) %>% 
+  select(`infused?` = notinfused) %>% 
   tbl_summary(missing = "no") %>% 
   bold_labels() %>% add_stat_label()
 ```
@@ -2045,11 +2047,11 @@ cilta %>%
 ```{r}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  select(max_crs_grade_0_5,
+  select(max_crs_grade_0_5, CRS_gradecat,
          day_of_onset_crs_relative_to_infusion,
          day_of_max_crs_relative_to_infusion,
          duration_of_crs_days, 
-         max_icans,
+         max_icans, ICANS_gradecat,
          day_of_onset_icans_relative_to_infusion,
          day_of_max_icans_relative_to_infusion,
          duration_of_icans_days,
@@ -2169,7 +2171,7 @@ tbl_stack(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8)) %>% as_gt() #%>%
 <!-- For responses make denominator evaluable patients -->
 <!-- Patient who died or was lost to follow-up or had non-secretory disease would not be evaluable -->
 
-## Table 3. Bone marrow biopsy findings
+## Bone marrow biopsy findings
 ```{r}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2252,7 +2254,7 @@ tbl_merge(list(tbl1, tbl2, tbl3, tbl4),
           tab_spanner = c("Baseline", "Day 30", "Day 90", "Day 180"))
 ```
 
-## Table 4. Supportive therapies and engraftment
+## Supportive therapies and engraftment
 Jenn did it for the ide-cel paper
 
 ```{r}
@@ -2279,7 +2281,7 @@ Jenn did it for the ide-cel paper
 #   bold_labels() %>% add_stat_label()
 ```
 
-## Table S1. Apheresis and product characteristics
+## Apheresis and product characteristics
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2299,7 +2301,7 @@ cilta %>%
   bold_labels() %>% add_stat_label()
 ```
  
-## Table S2. Cytopenias following ide-cel
+## Table 3. Cytopenias following ide-cel
 
 ```{r}
 tbl1 <- cilta %>% 
@@ -2491,7 +2493,7 @@ tbl_merge(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8, tbl9),
 #                            1 patient has missing 90 days values**"))
 ```
 
-## Table S3. Patient characteristics by grade 3+ cytopenia at Day 30
+## Patient characteristics by grade 3+ cytopenia at Day 30
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2559,7 +2561,7 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Cytopenia at days 30?**")
 ```
 
-## Table S3. Patient characteristics by grade 3+ cytopenia at Day 90
+## Patient characteristics by grade 3+ cytopenia at Day 90
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2625,7 +2627,7 @@ cilta %>%
 ```
 
 
-## Table S4. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
+## CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
 ```{r}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2679,7 +2681,8 @@ tbl3 <- cilta %>%
   # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
   select(#day_30_mrd_by_clono_seq_positive_vs_negative,
          ORR_30days, CRorbetter_30days,
-         day30_response_v2, gr3_cytopenia_30d) %>% 
+         # day30_response_v2, 
+         gr3_cytopenia_30d) %>% 
   tbl_summary(by = gr3_cytopenia_30d,
     #           type = list(
     # c(day_30_mrd_by_clono_seq_positive_vs_negative) ~ "categorical"),
@@ -2704,7 +2707,8 @@ tbl5 <- cilta %>%
   # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
   select(#MRD_mon3,
          ORR_mon3, CRorbetter_mon3,
-         mon3_response_v2, gr3_cytopenia_30d) %>% 
+         # mon3_response_v2, 
+         gr3_cytopenia_30d) %>% 
   tbl_summary(by = gr3_cytopenia_30d,
     #           type = list(
     # c(MRD_mon3) ~ "categorical"),
@@ -2754,11 +2758,11 @@ tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
  
 
 
-## Table S4. Details of infections after ide-cel
+## Details of infections after ide-cel
 Jenn
  
 
-## Table S5. Patients with infections in the first 30 days by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
+## Patients with infections in the first 30 days by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2823,7 +2827,7 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any severe infection**")
 ```
 
-## Table S6. Patients with infections in the first 100 days by cell counts and immunoglobulin levels
+## Patients with infections in the first 100 days by cell counts and immunoglobulin levels
 CCT5019-0512 has a time to infection but no in Any Infection but yes in Any Severe Infection
 ```{r}
 cilta %>%
@@ -2880,7 +2884,7 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any severe infection**")
 ```
 
-## Table SX. Immunoglobulin levels excluding patients with that type of myeloma 
+## Immunoglobulin levels excluding patients with that type of myeloma 
 (myeloma_involved_heavy_chain != "Igg")
 Should I limit to infections in the first 100 days?
 ```{r}
@@ -3026,7 +3030,7 @@ CRP <- fig_dat %>%
 plot_annotation(tag_levels = "A")
 ```
 
-## Figure 3. Cellular and humoral immune reconstitution after ide-cel
+## Figure 3. Cellular and humoral immune reconstitution after cilta-cel
 ```{r timeserie, fig.width=12, fig.height=12}
 # WBC
 val <- fig_dat %>% reframe(wbc_apheresis = MedianCI(wbc_apheresis, conf.level = 0.95, na.rm = TRUE),
@@ -3053,7 +3057,7 @@ WBC_fig <-
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
   ) #+ ylim(0, 6)
 
 # ANC
@@ -3081,7 +3085,7 @@ ANC_fig <- ANC_fig %>%
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
   ) #+ ylim(0, 6)
 
 # HB
@@ -3108,7 +3112,7 @@ Hb_fig <- Hb_fig %>%
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
   ) # +ylim(7.5, 12)
 
 # ALC
@@ -3135,7 +3139,7 @@ ALC_fig <- ALC_fig %>%
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
   ) # + ylim(0, 1.1)
 
 # Plt
@@ -3162,7 +3166,7 @@ Plt_fig <- Plt_fig %>%
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "60", "90")
+    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
   ) # + ylim(20, 170)
 
 # IgG
@@ -3184,8 +3188,8 @@ IgG_fig <- IgG_fig %>%
   theme_classic() + 
   geom_ribbon(aes(ymin = X2, ymax = X3), alpha = 0.1) + 
   scale_x_continuous(
-    breaks = c(-28, -5, 0, 30, 90, 180),
-    labels = c("Apheresis", "-5", "0", "30", "90", "180"))# + 
+    breaks = c(-28, -5, 30, 90, 180),
+    labels = c("Apheresis", "-5", "30", "90", "180"))# + 
   # ylim(0, 2000)
 
 # CD4
@@ -3261,225 +3265,225 @@ CD19_fig <- CD19_fig %>%
 ```
 <br>
 
-Aggregated median
-```{r timeserie aggreagate med, fig.width=12, fig.height=12}
-fig_dat <- cilta %>% 
-  distinct(pt_identifier, .keep_all = TRUE)
+<!-- Aggregated median -->
+<!-- ```{r timeserie aggreagate med, fig.width=12, fig.height=12} -->
+<!-- fig_dat <- cilta %>%  -->
+<!--   distinct(pt_identifier, .keep_all = TRUE) -->
 
-timepoints <- c(-28, -5, 0, 7, 14, 21, 30, 90, 180)
-WBC_agg <- fig_dat %>% 
-  select(site, starts_with("wbc_")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median WBC") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
-  )
+<!-- timepoints <- c(-28, -5, 0, 7, 14, 21, 30, 90, 180) -->
+<!-- WBC_agg <- fig_dat %>%  -->
+<!--   select(site, starts_with("wbc_")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median WBC") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180), -->
+<!--     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180") -->
+<!--   ) -->
 
-ANC_agg <- fig_dat %>% 
-  select(site, starts_with("anc_"), -anc_0_75_x_10_9_l_0_75_k_u_l) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median ANC") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
-  ) 
+<!-- ANC_agg <- fig_dat %>%  -->
+<!--   select(site, starts_with("anc_"), -anc_0_75_x_10_9_l_0_75_k_u_l) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median ANC") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180), -->
+<!--     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180") -->
+<!--   )  -->
 
 
-Hb_agg <- fig_dat %>% 
-  select(site, starts_with("hb_")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median Hb") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
-  ) 
-  
-ALC_agg <- fig_dat %>% 
-  select(site, starts_with("alc_"), -alc_0_3_x_10_9_l_0_3k_u_l) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median ALC") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
-  ) 
-  
-Plt_agg <- fig_dat %>% 
-  select(site, starts_with("plt_"), -c(starts_with("plt_transfusion"))) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median Plt") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180),
-    labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180")
-  )
+<!-- Hb_agg <- fig_dat %>%  -->
+<!--   select(site, starts_with("hb_")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median Hb") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180), -->
+<!--     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180") -->
+<!--   )  -->
 
-timepoints2 <- c(-28, -5, 30, 90, 180)
-IgG_agg <- fig_dat %>% 
-  select(site, ig_g_apheresis, starts_with("ig_g_day")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints2) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median Plt") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, -5, 0, 30, 90, 180),
-    labels = c("Apheresis", "-5", "0", "30", "90", "180")
-  )
+<!-- ALC_agg <- fig_dat %>%  -->
+<!--   select(site, starts_with("alc_"), -alc_0_3_x_10_9_l_0_3k_u_l) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median ALC") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180), -->
+<!--     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180") -->
+<!--   )  -->
 
-timepoints3 <- c(-28, 30, 90, 180)
-CD4_fig <- fig_dat %>% 
-  select(site, starts_with("cd4_")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints3) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median CD4") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, 30, 90, 180),
-    labels = c("Apheresis", "30", "90", "180")
-  )
-CD8_fig <- fig_dat %>% 
-  select(site, starts_with("cd8_")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints3) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median CD8") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, 30, 90, 180),
-    labels = c("Apheresis", "30", "90", "180")
-  )
-CD19_fig <- fig_dat %>% 
-  select(site, starts_with("cd19_")) %>% 
-  group_by(site) %>% 
-  reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>% 
-  mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>% 
-  ungroup() %>% select(-site) %>% 
-  group_by(type) %>% 
-  summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>% 
-  ungroup() %>% 
-  pivot_longer(cols = -type, names_to = 'Type') %>% 
-  pivot_wider(names_from = type, values_from = value) %>% 
-  mutate(timepoints = timepoints3) %>% 
-  ggplot(aes(x = timepoints, y = Median)) + 
-  geom_line(col = "blue") + 
-  xlab("Days relative to infusion") + 
-  ylab("Median CD19") + 
-  theme_classic() + 
-  geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) + 
-  scale_x_continuous(
-    breaks = c(-28, 30, 90, 180),
-    labels = c("Apheresis", "30", "90", "180")
-  )
+<!-- Plt_agg <- fig_dat %>%  -->
+<!--   select(site, starts_with("plt_"), -c(starts_with("plt_transfusion"))) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median Plt") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 7, 14, 21, 30, 90, 180), -->
+<!--     labels = c("Apheresis","-5", "0", "7", "14", "21", "30", "90", "180") -->
+<!--   ) -->
 
-(WBC_agg | ANC_agg | CD4_fig) /
-  (Hb_agg | ALC_agg | CD8_fig) /
-  (Plt_agg | IgG_agg | CD19_fig) +
-  plot_annotation(tag_levels = "A")
-```
+<!-- timepoints2 <- c(-28, -5, 30, 90, 180) -->
+<!-- IgG_agg <- fig_dat %>%  -->
+<!--   select(site, ig_g_apheresis, starts_with("ig_g_day")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints2) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median Plt") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, -5, 0, 30, 90, 180), -->
+<!--     labels = c("Apheresis", "-5", "0", "30", "90", "180") -->
+<!--   ) -->
+
+<!-- timepoints3 <- c(-28, 30, 90, 180) -->
+<!-- CD4_fig <- fig_dat %>%  -->
+<!--   select(site, starts_with("cd4_")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints3) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median CD4") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, 30, 90, 180), -->
+<!--     labels = c("Apheresis", "30", "90", "180") -->
+<!--   ) -->
+<!-- CD8_fig <- fig_dat %>%  -->
+<!--   select(site, starts_with("cd8_")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints3) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median CD8") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, 30, 90, 180), -->
+<!--     labels = c("Apheresis", "30", "90", "180") -->
+<!--   ) -->
+<!-- CD19_fig <- fig_dat %>%  -->
+<!--   select(site, starts_with("cd19_")) %>%  -->
+<!--   group_by(site) %>%  -->
+<!--   reframe(across(.cols = everything(), \(x) MedianCI(x, na.rm = TRUE))) %>%  -->
+<!--   mutate(type = rep(c("Median", "lwr.ci", "upr.ci"), 5), .before = 1) %>%  -->
+<!--   ungroup() %>% select(-site) %>%  -->
+<!--   group_by(type) %>%  -->
+<!--   summarise(across(.cols = everything(), list(median = median) , na.rm = TRUE)) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   pivot_longer(cols = -type, names_to = 'Type') %>%  -->
+<!--   pivot_wider(names_from = type, values_from = value) %>%  -->
+<!--   mutate(timepoints = timepoints3) %>%  -->
+<!--   ggplot(aes(x = timepoints, y = Median)) +  -->
+<!--   geom_line(col = "blue") +  -->
+<!--   xlab("Days relative to infusion") +  -->
+<!--   ylab("Median CD19") +  -->
+<!--   theme_classic() +  -->
+<!--   geom_ribbon(aes(ymin = lwr.ci, ymax = upr.ci), alpha = 0.1) +  -->
+<!--   scale_x_continuous( -->
+<!--     breaks = c(-28, 30, 90, 180), -->
+<!--     labels = c("Apheresis", "30", "90", "180") -->
+<!--   ) -->
+
+<!-- (WBC_agg | ANC_agg | CD4_fig) / -->
+<!--   (Hb_agg | ALC_agg | CD8_fig) / -->
+<!--   (Plt_agg | IgG_agg | CD19_fig) + -->
+<!--   plot_annotation(tag_levels = "A") -->
+<!-- ``` -->
 
 <!-- <span style="color:blue">**IgG I need to fix the other 109**</span>  -->
 
@@ -3598,15 +3602,31 @@ a <- fig_dat %>%
   mutate(perc=(count/sum(count)*100)
   ) %>%
   separate("name2", into = c("name", "day"), sep = "_") %>% 
-  ungroup() %>% 
-  filter(value == "Yes") %>% 
+  ungroup()
+
+# We want to plot the Yes patients 
+# but filtering filter(value == "Yes") leave blanks if all patients are NO
+# Code to fix it is :
+c <- a %>% 
+  arrange(name, day, grade, desc(value)) %>%  # desc to have yes first
+  distinct(name, day, grade, .keep_all = TRUE) %>% 
+  mutate(count = case_when(
+    value == "No"           ~ 0,
+    TRUE                    ~ count
+  ), perc = case_when(
+    value == "No"           ~ 0,
+    TRUE                    ~ perc
+  )) %>% 
+
+  # filter(value == "Yes") %>% 
   # add_row("name"="Leukopenia",  "day"="apheresis", "value"= "Yes", "grade"="Any grade", "count"=0, "perc"=0) %>% 
   mutate(day = factor(day, levels = c("apheresis", "-5d", "30d", "60d", "90d"))) %>% 
   mutate(name = str_replace(name, "^cytopenia", "Any Cytopenia")) %>% 
-  mutate(name = factor(name, levels = c("Anemia", "Neutropenia", "Thrombocytopenia", "Any Cytopenia")))
+  mutate(name = factor(name, levels = c("Anemia", "Neutropenia", "Thrombocytopenia", "Any Cytopenia"))) %>% 
+  filter(!is.na(name))
   
-b <- a %>% filter(grade == "Any grade")
-a %>% filter(grade == "Grade 3+") %>% 
+b <- c %>% filter(grade == "Any grade")
+c %>% filter(grade == "Grade 3+") %>% 
   ggplot(aes(x= day, 
              y= perc, 
              fill= name, alpha= 1
@@ -3638,7 +3658,7 @@ a %>% filter(grade == "Grade 3+") %>%
 #   labs(fill = NULL, x= NULL, y = "%")+
 #   theme_classic(base_size = 14)
 
-a %>% filter(grade == "Grade 3+") %>% 
+c %>% filter(grade == "Grade 3+") %>% 
   ggplot(aes(x= day, 
              y= perc, 
              fill= name, 
@@ -3654,7 +3674,6 @@ a %>% filter(grade == "Grade 3+") %>%
   labs(fill = NULL, x= NULL, y = "%")+
   theme_classic(base_size = 14)+
   theme(legend.position="bottom")
-
 ```
  
 
