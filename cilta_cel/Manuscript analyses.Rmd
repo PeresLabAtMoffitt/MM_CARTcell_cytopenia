@@ -137,7 +137,7 @@ cart <- cart %>%
   # Suboptimal is NA
   mutate(across(c(#"bm_plasma_cell_percent_at_pre_ld",
                   "high_marrow_burden_50_percent",
-                  contains("normo_hypo_hyper"),
+                  # contains("normo_hypo_hyper"),
                   contains("fibrosis"),
                   contains("dysplasia"),
                   "b2_microglobulin_day_180"), 
@@ -400,7 +400,12 @@ cart1 <- cart %>%
     TRUE                                                          ~ NA_character_
   ),cart_cell_dose = 
     factor(cart_cell_dose, levels = c("≥ 0.7", 
-                                      "< 0.7")))
+                                      "< 0.7"))) %>% 
+  mutate(access_type = case_when(
+    str_detect(access_type, "^C|catheter")                          ~ "Central venous catheter",
+    str_detect(access_type, "^P")                                 ~ "Peripheral",
+    TRUE                                                          ~ access_type
+  ))
 ```
 
 ```{r toxicities}
@@ -1692,11 +1697,6 @@ cart6 <- cart6 %>%
            duration(n=1, units = "days"))
   
 
-  # mutate(access_type = case_when(
-  #   access_type == "Femoral"                                    ~ "Non-tunneled",
-  #   access_type == "AVF"                                        ~ "Peripheral",
-  #   TRUE                                                          ~ access_type
-  # )) %>% 
 # cart7 <- cart6 %>% 
 #   mutate(infection = case_when(
 #     notinfused=="YES" ~ NA_character_,
@@ -1755,6 +1755,7 @@ cilta <- cart6 %>%
     TRUE                                                          ~ "No"
   )) %>%
   mutate(delayed_neuro_type = case_when(
+    what_non_parkinsonian_neurotoxicity == "Aidp"                 ~ "Polyneuropathy",
     what_non_parkinsonian_neurotoxicity == 
       "Posterior reversible encephalopathy syndrome (PRES) and parkinsonism" 
                                                                   ~ "Parkinsonian/PRES",
@@ -2009,7 +2010,7 @@ cilta %>%
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  select(age, agecat, male_sex, sex,
+  select(os_from_infusion_months, age, agecat, male_sex, sex,
          extramedullary_disease_yes_no, 
          high_marrow_burden_50_percent, ecog_at_ld, 
          r_iss_at_car_t_infusion, 
@@ -2509,7 +2510,7 @@ cilta %>%
          # daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
          "Marrow Cellularity (%) at Day30" = marrow_percent_cellularity_day_30,
-         age, agecat, male_sex, sex,
+         os_from_infusion_months, age, agecat, male_sex, sex,
          extramedullary_disease_yes_no, 
          high_marrow_burden_50_percent, ecog_at_ld, 
          r_iss_at_car_t_infusion, cytogenetics, 
@@ -2577,6 +2578,7 @@ cilta %>%
          # daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
          "Marrow Cellularity (%) at Day90" = marrow_percent_cellularity_day_90,
+         os_from_infusion_months,
          age, agecat, male_sex, sex,
          extramedullary_disease_yes_no, 
          high_marrow_burden_50_percent, ecog_at_ld, r_iss_at_car_t_infusion, cytogenetics, 
@@ -2758,11 +2760,209 @@ tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
  
 
 
-## Details of infections after ide-cel
-Jenn
+## Table S8.Details of infections after ide-cel
+```{r infection details 30 first days}
+tbl1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Fungal", "Viral")) %>%
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>%
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  modify_column_indent(columns = label, undo = TRUE) %>% 
+  bold_levels() %>% 
+  modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
+  modify_footnote(update = everything() ~ NA) %>%
+  modify_spanning_header(all_stat_cols() ~ "**Infections in the first 30 days**")
+
+tbl1_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Bacterial") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl2 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Bacterial", "Viral")) %>% 
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  bold_levels() %>%
+  modify_column_indent(columns = label, undo = TRUE)
+
+tbl2_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Fungal") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl3 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Bacterial", "Fungal")) %>% 
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  bold_levels() %>%
+  modify_column_indent(columns = label, undo = TRUE)
+
+tbl3_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Viral") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl_stack(list(tbl1, tbl1_1, tbl2, tbl2_1, tbl3, tbl3_1))
+```
+
+```{r infection details between 31 - 100 days}
+tbl1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Fungal", "Viral")) %>%
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>%
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  modify_column_indent(columns = label, undo = TRUE) %>% 
+  bold_levels() %>% 
+  modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
+  modify_footnote(update = everything() ~ NA) %>%
+  modify_spanning_header(all_stat_cols() ~ "**Infections day 31 – 100**")
+
+tbl1_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Bacterial") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl2 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Bacterial", "Viral")) %>% 
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  bold_levels() %>%
+  modify_column_indent(columns = label, undo = TRUE)
+
+# tbl2_1 <- cilta %>% 
+#   filter(time_from_infusion_to_infection_days > 30 &
+#            time_from_infusion_to_infection_days <= 100) %>% 
+#   filter(infection_type_bacterial_viral_fungal_parasitic == "Fungal") %>%
+#   select(infection_type_details) %>% 
+#   tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+#   remove_row_type(infection_type_details, type = "header")
+
+tbl3 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Bacterial", "Fungal")) %>% 
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  bold_levels() %>%
+  modify_column_indent(columns = label, undo = TRUE)
+
+tbl3_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Viral") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl_stack(list(tbl1, tbl1_1, #tbl2,# tbl2_1, 
+               tbl3, tbl3_1))
+```
+
+```{r infection details after 100 days}
+tbl1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 100) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Fungal", "Viral")) %>%
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>%
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  modify_column_indent(columns = label, undo = TRUE) %>% 
+  bold_levels() %>% 
+  modify_header(update = all_stat_cols() ~ "**{level}**, N = {n}") %>%
+  modify_footnote(update = everything() ~ NA) %>%
+  modify_spanning_header(all_stat_cols() ~ "**Infections after day 100**")
+
+tbl1_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 100) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Bacterial") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+# tbl2 <- cilta %>% 
+#   filter(time_from_infusion_to_infection_days > 100) %>% 
+#   select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+#   tbl_summary() %>%
+#   remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+#                   type= "level",
+#                   level_value = c("Bacterial", "Viral")) %>% 
+#   remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+#   add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+#   bold_levels() %>%
+#   modify_column_indent(columns = label, undo = TRUE)
+# 
+# tbl2_1 <- cilta %>% 
+#   filter(time_from_infusion_to_infection_days > 100) %>% 
+#   filter(infection_type_bacterial_viral_fungal_parasitic == "Fungal") %>%
+#   select(infection_type_details) %>% 
+#   tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+#   remove_row_type(infection_type_details, type = "header")
+
+tbl3 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 100) %>% 
+  select(infection_type_bacterial_viral_fungal_parasitic) %>% 
+  tbl_summary() %>%
+  remove_row_type(variables = infection_type_bacterial_viral_fungal_parasitic,
+                  type= "level",
+                  level_value = c("Bacterial", "Fungal")) %>% 
+  remove_row_type(infection_type_bacterial_viral_fungal_parasitic, type = "header") %>% 
+  add_stat_label(label = infection_type_bacterial_viral_fungal_parasitic ~ c("n (%)"), location = "column") %>%
+  bold_levels() %>%
+  modify_column_indent(columns = label, undo = TRUE)
+
+tbl3_1 <- cilta %>% 
+  filter(time_from_infusion_to_infection_days > 100) %>% 
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Viral") %>%
+  select(infection_type_details) %>% 
+  tbl_summary(statistic = infection_type_details ~ c("{n}")) %>% 
+  remove_row_type(infection_type_details, type = "header")
+
+tbl_stack(list(tbl1, tbl1_1, #tbl2, tbl2_1, 
+               tbl3, tbl3_1))
+```
  
 
-## Patients with infections in the first 30 days by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
+## Patients with infections by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2827,12 +3027,10 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any severe infection**")
 ```
 
-## Patients with infections in the first 100 days by cell counts and immunoglobulin levels
-CCT5019-0512 has a time to infection but no in Any Infection but yes in Any Severe Infection
+## Patients with infections by cell counts and immunoglobulin levels
 ```{r}
 cilta %>%
-  filter(time_from_infusion_to_infection_days <= 100 |
-           any_infection == "No") %>% 
+  filter(any_infection == "No") %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(ig_g_day_5, ig_a_day_5, ig_m_day_5,
          wbc_day_5, anc_day_5_k_ul,
@@ -2857,8 +3055,7 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any infection**")
 
 cilta %>% 
-  filter(time_from_infusion_to_infection_days <= 100 |
-           any_sevinfection == "No") %>% 
+  filter(any_sevinfection == "No") %>% 
   arrange(pt_identifier, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(ig_g_day_5, ig_a_day_5, ig_m_day_5,
@@ -2886,7 +3083,6 @@ cilta %>%
 
 ## Immunoglobulin levels excluding patients with that type of myeloma 
 (myeloma_involved_heavy_chain != "Igg")
-Should I limit to infections in the first 100 days?
 ```{r}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -3670,7 +3866,7 @@ c %>% filter(grade == "Grade 3+") %>%
             )+
   
   scale_fill_brewer(palette = "Spectral")+
-  ylim(0, 100)+
+  ylim(0, 60)+
   labs(fill = NULL, x= NULL, y = "%")+
   theme_classic(base_size = 14)+
   theme(legend.position="bottom")
@@ -3764,10 +3960,12 @@ alluvial_B <- moffitt_subset %>%
   
   ggplot(aes(axis1 = vzv_ig_g_apheresis, axis2= vzv_ig_g_d90,
              y = count)) +
-  geom_alluvium(aes(fill = vzv_ig_g_apheresis)
+  geom_alluvium(aes(fill = vzv_ig_g_apheresis), 
+                color = c("transparent", "transparent", "white", "transparent", "transparent", "transparent")
   )+
   geom_stratum()+
   geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  # geom_hline(yintercept = 5, color = "blue")+
   theme_classic()+
   ggtitle("Evolution of virus titers")
 ```
@@ -3857,19 +4055,13 @@ library(ComplexHeatmap)
 mat <- moffitt_subset %>% 
   select(pt_identifier, 
          intersect(starts_with("pneumo"), ends_with("change"))) %>% 
-  drop_na() #%>% 
-  # mutate(new_sort = 
-  #          c(6,10,11,26,8,
-  #            12,24,13,31,
-  #            14,15, 5,9, 16,
-  #            17,30,18,27, 2,
-  #            7,4,19,29,20,
-  #            3, 21, 25, 22, 
-  #            23,1,28),
-  #        .before = 2) %>%
-  # 
-  # arrange(new_sort) %>% 
-  #   select(-new_sort)
+  drop_na() %>% 
+  mutate(new_sort =
+           c(4,3,12,31,13,14,9,15,5,6,8,10,32,16,18,17,19,30,2,1,20,21,40,22),
+         .before = 2) %>%
+
+  arrange(new_sort) %>%
+    select(-new_sort)
 
 df5 <- t((as.matrix(mat)))
 
@@ -3889,7 +4081,7 @@ colors = structure(c("blue", "darkgrey", "lightgrey", "red"),
 ht_list <- Heatmap(df, name = "change", 
         rect_gp = gpar(col = "white", lwd = 0.1),
         column_title = "Change in titers",
-        show_column_names =FALSE,
+        # show_column_names =FALSE,
         row_names_side = "left",
         row_names_gp = gpar(fontsize = 11),
         col = colors)
