@@ -4698,7 +4698,8 @@ ggplot(data=forest_p, aes(y=name, x=OR, xmin=lower, xmax=upper)) +
 surv_dat <- fig_dat %>% 
   mutate(ORR_as_best_response = case_when(
     ORR_as_best_response == "ORR"         ~ "ORR",
-    is.na(ORR_as_best_response)           ~ "never ORR"
+    ORR_as_best_response == "SD/PD"       ~ "never ORR",
+    # TRUE                                  ~ "never ORR"
   ))
 
 library(survival)
@@ -4811,22 +4812,24 @@ coxph(Surv(time = surv_dat$os_from_infusion_months,
   add_nevent(location = "level") %>% add_n(location = "level")
 ```
 
+## UVA best ORR by gr3 cytopenia at day 90
+I was unable to perform the analyses investigating severe cytopenias at D90 and best response because everyone with severe cytopenias had an event.
 ```{r glm}
 mva_dat <- surv_dat %>% 
-  filter(os_from_infusion_months > 3) %>% 
+  # filter(os_from_infusion_months > 3) %>% 
   mutate(ORR_as_best_response = case_when(
     ORR_as_best_response == "ORR"         ~ 1,
     ORR_as_best_response == "never ORR"   ~ 0
   )) 
 
-glm(ORR_as_best_response ~ gr3_cytopenia_90d,
-    data = mva_dat,
-    family = "binomial") %>%
-  tbl_regression(exponentiate = TRUE, 
-                 intercept = TRUE) %>%
-  add_nevent(location = "level") %>% add_n(location = "level") %>%
-  modify_spanning_header(everything() ~ "**ORR_as_best_response**") %>%
-  bold_p(t = .05) 
+# glm(ORR_as_best_response ~ gr3_cytopenia_90d,
+#     data = mva_dat,
+#     family = "binomial") %>%
+#   tbl_regression(exponentiate = TRUE, 
+#                  intercept = TRUE) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**ORR_as_best_response**") %>%
+#   bold_p(t = .05) 
 ```
 
 
