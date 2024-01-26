@@ -76,6 +76,29 @@ id_to_modify_neurotox <-
   read_csv(
     paste0(here(), 
            "/cilta_cel/patient id who had icans and delayed neurotox - need to change neurotox type to PRES.csv"))
+
+infections_cat <- 
+  read_csv(
+    paste0(here(), 
+           "/cilta_cel/Infections categorized.csv")) %>% 
+  distinct() %>% 
+  purrr::keep(~!all(is.na(.))) %>% 
+  rename("infection_type_cat" = `...14`) %>% 
+  drop_na(infection_type_details) %>% 
+  add_row(infection_type_bacterial_viral_fungal_parasitic = "Bacterial", 
+          infection_type_details = "Pna, unknown organism (covid -) resulting in ards and death",
+          infection_type_cat = "Respiratory infections")
+
+viral_cat <- 
+  read_csv(
+    paste0(here(), 
+           "/cilta_cel/Infections categorized.csv DKH.csv")) %>% 
+  distinct() %>% 
+  janitor::clean_names() %>% 
+  select(-c(x4,x5))
+
+HLH <-
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/HLH.xlsx"))
 ```
 
 
@@ -87,6 +110,7 @@ cart <- full_join(Characteristics, Counts, by = "PT Identifier") %>%
   full_join(., Pneumo_titers, by = "PT Identifier") %>% 
   # select(-`Date of leukapheresis.y`, `Date of leukapheresis` = `Date of leukapheresis.x`) %>% 
   full_join(., Apheresis, by = "PT Identifier") %>% 
+  left_join(., HLH, by = c("PT Identifier" = "PT Identifier (DO NOT USE PHI)")) %>% 
   janitor::clean_names()
 ```
 
@@ -124,12 +148,18 @@ cart <- cart %>%
   mutate(across(c(where(is.character),
                   -c("pt_identifier",
                      "r_iss_at_car_t_infusion")), 
-                ~ str_to_sentence(.) )) %>%
+                ~ str_to_sentence(.) )) %>% 
+  # Merge with infection and viral group here afetr str_to_sentence
+  left_join(., infections_cat,
+            by = c("infection_type_bacterial_viral_fungal_parasitic", "infection_type_details")) %>%
+  left_join(., viral_cat,
+            by = c("infection_type_bacterial_viral_fungal_parasitic", "infection_type_details")) %>%
   mutate(across(c(contains("vgpr"), "response_to_bridging_chemotherapy"
                   ), 
                 ~ str_to_upper(.) )) %>%
   
-  mutate(across(where(is.character), ~ str_replace(., "Unknown|unknown", NA_character_))) %>%
+  mutate(across(where(is.character), 
+                ~ str_replace(., "^Unknown$|^unknown$|^UNKNOWN$", NA_character_))) %>%
   # Create site variable
   mutate(site = case_when(
     str_detect(pt_identifier, "MCC")               ~ "Moffitt",
@@ -387,14 +417,14 @@ cart <- cart %>%
 cart1 <- cart %>% 
   # Baseline labs ----
   mutate(baseline_ferritin_cat = case_when(
-    baseline_ferritin_pre_ld >= 400                                      ~ "≥ ULN at LD (≥ 400)",
-    baseline_ferritin_pre_ld < 400                                       ~ "Normal (< 400)"
+    baseline_ferritin_pre_ld >= 400                                ~ "≥ ULN at LD (≥ 400)",
+    baseline_ferritin_pre_ld < 400                                 ~ "Normal (< 400)"
   ), baseline_ferritin_cat = 
     factor(baseline_ferritin_cat, levels = c("Normal (< 400)",
                                              "≥ ULN at LD (≥ 400)"))) %>% 
   mutate(baseline_crp_cat = case_when(
-    baseline_crp_pre_ld  >= 0.5                                           ~ "≥ ULN at LD (≥ 0.5)",
-    baseline_crp_pre_ld  < 0.5                                            ~ "Normal (< 0.5)"
+    baseline_crp_pre_ld  >= 0.5                                    ~ "≥ ULN at LD (≥ 0.5)",
+    baseline_crp_pre_ld  < 0.5                                     ~ "Normal (< 0.5)"
   ), baseline_crp_cat = 
     factor(baseline_crp_cat, levels = c("Normal (< 0.5)",
                                         "≥ ULN at LD (≥ 0.5)"))) %>% 
@@ -423,12 +453,25 @@ cart1 <- cart %>%
     day_of_neutrophil_recovery == "Deceased"                     ~ "Yes",
     day_of_neutrophil_recovery == "Pd prior to anc recovery"     ~ "Yes"
   )) %>% 
-  mutate(day_of_neutrophil_recovery_ = case_when(
+  mutate(day_of_neutrophil_recovery_KUMC = case_when(
     site == "KUMC"                                               ~ as.numeric(day_of_neutrophil_recovery)
+  )) %>% 
+  mutate(ivig_last_date_beyond_pd = case_when(
+    last_date_of_ivig == "Beyond pd"       ~ "Yes"
   )) %>% 
   mutate(across(c("last_date_of_gcsf", "day_of_neutrophil_recovery",
                   "last_date_of_ivig"), 
          ~ as.Date(as.numeric(.), origin = "1899-12-30"))) %>% 
+  mutate(date_of_neutrophil_recovery = day_of_neutrophil_recovery,
+         date_of_neutrophil_recovery = case_when(
+           date_of_neutrophil_recovery < date_of_car_t_infusion    ~ NA_Date_,
+           TRUE                                                    ~ date_of_neutrophil_recovery
+         )) %>% 
+  mutate(day_of_neutrophil_recovery = interval(
+             start = date_of_car_t_infusion, 
+             end = date_of_neutrophil_recovery)/
+           duration(n=1, units = "days"
+  ), day_of_neutrophil_recovery = coalesce(day_of_neutrophil_recovery_KUMC, day_of_neutrophil_recovery)) %>% 
   mutate(first_day_of_gcsf = interval(
              start = date_of_car_t_infusion, 
              end = first_date_of_gcsf)/
@@ -444,17 +487,11 @@ cart1 <- cart %>%
              end = date_of_stem_cell_boost)/
            duration(n=1, units = "days"
   )) %>%
-  mutate(day_of_neutrophil_recovery = interval(
-             start = date_of_car_t_infusion, 
-             end = day_of_neutrophil_recovery)/
-           duration(n=1, units = "days"
-  ), day_of_neutrophil_recovery = coalesce(day_of_neutrophil_recovery_, day_of_neutrophil_recovery)) %>% 
-  select(-day_of_neutrophil_recovery_) %>% 
   mutate(transfusion_postCART = case_when(
     rbc_transfusion_within_30d_post_cart_yes_1_no_0 == "Yes" |
       plt_transfusion_within_30d_post_cart_yes_1_no_0 == "Yes" |
       rbc_transfusion_30d_post_cart_yes_1_no_0 == "Yes" |
-      plt_transfusion_30d_post_cart_yes_1_no_0 == "Yes"              ~ "Yes"
+      plt_transfusion_30d_post_cart_yes_1_no_0 == "Yes"            ~ "Yes"
   )) %>% 
   mutate(first_day_of_tpo_agonist = interval(
              start = date_of_car_t_infusion, 
@@ -470,11 +507,26 @@ cart1 <- cart %>%
              start = date_of_car_t_infusion, 
              end = first_date_of_ivig)/
            duration(n=1, units = "days"
-  )) %>%
+  ), first_day_of_ivig = case_when(
+    first_day_of_ivig >= 0                                         ~ first_day_of_ivig,
+    TRUE                                                           ~ NA_real_
+  )) %>% 
+  mutate(last_date_of_ivig = case_when(
+    ivig_last_date_beyond_pd == "Yes"                              ~ as.Date(as.numeric(date_of_pd),origin = "1899-12-30"),
+    TRUE                                                           ~ last_date_of_ivig
+  )) %>% 
   mutate(last_day_of_ivig = interval(
              start = date_of_car_t_infusion, 
              end = last_date_of_ivig)/
            duration(n=1, units = "days"
+  ), last_day_of_ivig = case_when(
+    last_day_of_ivig >= 0                                          ~ last_day_of_ivig,
+    TRUE                                                           ~ NA_real_
+    )) %>% 
+  mutate(need_for_ivig_yes_1_no_0 = case_when(
+    first_date_of_ivig < date_of_car_t_infusion |
+      last_date_of_ivig < date_of_car_t_infusion                   ~ "No",
+    TRUE                                                           ~ need_for_ivig_yes_1_no_0
   ))
 
 ```
@@ -670,6 +722,7 @@ cart2 <- cart1 %>%
     TRUE                                                        ~ "No"
   )) %>% 
   mutate(Neutropenia_7d = case_when(
+    date_of_neutrophil_recovery < date_of_car_t_infusion        ~ "No",
     anc_day_7 < 1.8                                             ~ "Yes",
     is.na(anc_day_7)                                            ~ NA_character_,
     TRUE                                                        ~ "No"
@@ -720,6 +773,7 @@ cart2 <- cart1 %>%
     TRUE                                                        ~ "No"
   )) %>% 
   mutate(gr3_Neutropenia_7d = case_when(
+    date_of_neutrophil_recovery < date_of_car_t_infusion        ~ "No",
     anc_day_7 < 1                                               ~ "Yes",
     is.na(anc_day_7)                                            ~ NA_character_,
     TRUE                                                        ~ "No"
@@ -755,6 +809,7 @@ cart2 <- cart1 %>%
     TRUE                                                        ~ "No"
   )) %>% 
   mutate(Neutropenia_gr1 = case_when(
+    date_of_neutrophil_recovery < date_of_car_t_infusion        ~ "No",
     (anc_day_7 < 1.8 &
        anc_day_7 > 1.5) |
       (anc_day_30 < 1.8 &
@@ -772,6 +827,7 @@ cart2 <- cart1 %>%
     TRUE                                                        ~ "No"
   )) %>% 
   mutate(Neutropenia_gr2 = case_when(
+    date_of_neutrophil_recovery < date_of_car_t_infusion        ~ "No",
     (anc_day_7 < 1.5 &
        anc_day_7 > 1) |
       (anc_day_30 < 1.5 &
@@ -789,6 +845,7 @@ cart2 <- cart1 %>%
     TRUE                                                        ~ "No"
   )) %>% 
   mutate(Neutropenia_gr3 = case_when(
+    date_of_neutrophil_recovery < date_of_car_t_infusion        ~ "No",
     anc_day_7 < 1 |
       anc_day_30 < 1 |
       anc_day_180 < 1 |
@@ -1768,15 +1825,28 @@ cart6 <- cart5 %>%
 ```{r infection}
 cart6 <- cart6 %>%
   # Infection ----
-  mutate(any_infection = infection_yes_1_no_0
-  ) %>%
-  mutate(any_sevinfection = severe_infection_need_for_iv_antibiotics_and_or_hospitalization_yes_1_no_0
-  ) %>% 
   mutate(time_from_infusion_to_infection_days = 
            interval(
              start = date_of_car_t_infusion, 
              end = date_of_infection)/
-           duration(n=1, units = "days"))
+           duration(n=1, units = "days"), 
+         time_from_infusion_to_infection_days = case_when(
+    time_from_infusion_to_infection_days >= 0     ~ time_from_infusion_to_infection_days,
+    TRUE                                          ~ NA_real_
+    )) %>% 
+  mutate(any_infection = case_when(
+    time_from_infusion_to_infection_days >= 0     ~ infection_yes_1_no_0,
+    TRUE                                          ~ "No"
+  )) %>%
+  mutate(any_sevinfection = case_when(
+    time_from_infusion_to_infection_days >= 0     ~ severe_infection_need_for_iv_antibiotics_and_or_hospitalization_yes_1_no_0,
+    TRUE                                          ~ "No"
+  )) %>% 
+  mutate(across(c("infection_type_details", "infection_type_bacterial_viral_fungal_parasitic",
+                  "infection_type_cat"), ~ case_when(
+    time_from_infusion_to_infection_days >= 0     ~ .,
+    TRUE                                          ~ NA_character_
+  )))
   
 
 # cart7 <- cart6 %>% 
@@ -1846,7 +1916,8 @@ cilta <- cart6 %>%
     str_detect(pt_identifier, id_to_modify_neurotox$id)           ~ "PRES",
     what_non_parkinsonian_neurotoxicity == "cerebral edema/PRES"
                                                                   ~ "PRES",
-    what_non_parkinsonian_neurotoxicity == "Aidp"                 ~ "Polyneuropathy",
+    what_non_parkinsonian_neurotoxicity == "Aidp" |
+      what_non_parkinsonian_neurotoxicity == "Slowed cognition"   ~ "Polyneuropathy",
     what_non_parkinsonian_neurotoxicity == 
       "Posterior reversible encephalopathy syndrome (pres) and parkinsonism" 
                                                                   ~ "Parkinsonian/PRES",
@@ -2046,6 +2117,7 @@ var_label(cilta) <- list(age = "Patient age", agecat = "Patient age - Categories
                          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no = 
                            "Other/Delayed Non-Parkinsonian Neurologic Toxicity",
                          delayed_neuro_type = "Delayed Neurotoxicity Type",
+                         hlh = "HLH", hlh_hlh_like_toxicities = "HLH/HLH-Like Toxicities?",
                          
                          tbv = "TBV", whole_blood_processed_m_l = "Whole blood processed (mL)",
                          final_collection_volume_m_l = "Final collection volume (mL)", 
@@ -2170,7 +2242,8 @@ tbl1 <- cilta %>%
          delayed_neuro,
          parkinsonian_neurotoxicity_yes_no,
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
-         delayed_neuro_type) %>% 
+         delayed_neuro_type,
+         hlh, hlh_hlh_like_toxicities) %>% 
   tbl_summary(type = list(
     c(day_of_onset_crs_relative_to_infusion,
          day_of_max_crs_relative_to_infusion,
@@ -2684,7 +2757,7 @@ tbl_stack(list(tbl1, tbl1_1, tbl2, tbl2_1, tbl3, tbl3_1,
                tbl4, tbl4_1, tbl5, tbl5_1, tbl6, tbl6_1))
 ```
 
-## Patient characteristics by grade 3+ cytopenia at Day 30
+## Table S4. Patient characteristics by grade 3+ cytopenia at Day 30
 ```{r Patient characteristics by grade 3+ cytopenia at Day 30}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2752,7 +2825,7 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Cytopenia at days 30?**")
 ```
 
-## Patient characteristics by grade 3+ cytopenia at Day 90
+## Table S5. Patient characteristics by grade 3+ cytopenia at Day 90
 ```{r Patient characteristics by grade 3+ cytopenia at Day 90}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2819,7 +2892,7 @@ cilta %>%
 ```
 
 
-## CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
+## Table S6. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
 ```{r CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2837,6 +2910,7 @@ tbl1 <- cilta %>%
          parkinsonian_neurotoxicity_yes_no,
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
+         hlh, hlh_hlh_like_toxicities,
          gr3_cytopenia_30d) %>% 
   tbl_summary(by = gr3_cytopenia_30d,
               type = list(
@@ -2948,10 +3022,8 @@ tbl7 <- cilta %>%
 tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
 ```
 
- 
-
-
-## Table S8.Details of infections after ide-cel
+## Table S8. Details of infections after ide-cel
+Patients can be counted multiple times if multiple infections.
 ```{r infection details 30 first days}
 tbl1 <- cilta %>% 
   filter(time_from_infusion_to_infection_days <= 30) %>% 
@@ -3153,9 +3225,10 @@ tbl_stack(list(tbl1, tbl1_1, #tbl2, tbl2_1,
 ```
  
 
-## Patients with infections by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
+## Table S9. Patients with infections by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy
 ```{r Patients with infections by CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy}
 cilta %>% 
+  arrange(pt_identifier, desc(any_infection)) %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(number_prior_lines_therapy,
          number_of_prior_lines_of_therapy,
@@ -3174,6 +3247,7 @@ cilta %>%
          parkinsonian_neurotoxicity_yes_no,
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
+         hlh, hlh_hlh_like_toxicities,
          steroid_use_yes_no, 
          tocilizumab_yes_no, anakinra_yes_no,
          bridging_therapy_yes_no, any_infection) %>% 
@@ -3205,6 +3279,7 @@ cilta %>%
          parkinsonian_neurotoxicity_yes_no,
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
+         hlh, hlh_hlh_like_toxicities,
          steroid_use_yes_no, 
          tocilizumab_yes_no, anakinra_yes_no,
          bridging_therapy_yes_no, any_sevinfection) %>% 
@@ -3218,10 +3293,10 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any severe infection**")
 ```
 
-## Patients with infections by cell counts and immunoglobulin levels
+## Table S10 A-B. Patients with infections by cell counts and immunoglobulin levels
 ```{r Patients with infections by cell counts and immunoglobulin levels}
 cilta %>%
-  filter(any_infection == "No") %>% 
+  arrange(pt_identifier, desc(any_infection)) %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(ig_g_day_5, ig_a_day_5, ig_m_day_5,
          wbc_day_5, anc_day_5_k_ul,
@@ -3246,7 +3321,6 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any infection**")
 
 cilta %>% 
-  filter(any_sevinfection == "No") %>% 
   arrange(pt_identifier, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(ig_g_day_5, ig_a_day_5, ig_m_day_5,
@@ -3272,12 +3346,13 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any severe infection**")
 ```
 
-## Immunoglobulin levels excluding patients with that type of myeloma 
+## Table S10 C-D. Immunoglobulin levels excluding patients with that type of myeloma 
 (myeloma_involved_heavy_chain != "Igg")
 ```{r Immunoglobulin levels excluding patients with that type of myeloma}
 cilta %>% 
-  distinct(pt_identifier, .keep_all = TRUE) %>% 
   filter(myeloma_involved_heavy_chain != "Igg" | is.na(myeloma_involved_heavy_chain)) %>% 
+  arrange(pt_identifier, desc(any_infection)) %>%
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
   select(ig_g_day_5, ig_g_day_30,
          ig_g_day_90, any_infection) %>% 
   tbl_summary(by = any_infection,
@@ -3290,9 +3365,9 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Any infection**")
 
 cilta %>% 
+  filter(myeloma_involved_heavy_chain != "Igg" | is.na(myeloma_involved_heavy_chain)) %>% 
   arrange(pt_identifier, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  filter(myeloma_involved_heavy_chain != "Igg" | is.na(myeloma_involved_heavy_chain)) %>% 
   select(ig_g_day_5, ig_g_day_30,
          ig_g_day_90, any_sevinfection) %>% 
   tbl_summary(by = any_sevinfection,
@@ -3316,7 +3391,7 @@ fig_dat <- cilta %>%
 
  
 
-## Figure 2. Inflammatory markers after ide-cel
+## Figure S1. Inflammatory markers after ide-cel
 
 
 ```{r Figure 2. Inflammatory markers after ide-cel, fig.height=12}
@@ -3417,7 +3492,7 @@ CRP <- fig_dat %>%
 plot_annotation(tag_levels = "A")
 ```
 
-## Figure 3. Cellular and humoral immune reconstitution after cilta-cel
+## Figure 2. Cellular and humoral immune reconstitution after cilta-cel
 ```{r timeserie, fig.width=12, fig.height=12}
 # WBC
 val <- fig_dat %>% reframe(wbc_apheresis = MedianCI(wbc_apheresis, conf.level = 0.95, na.rm = TRUE),
@@ -3879,7 +3954,7 @@ CD19_fig <- CD19_fig %>%
 <br>
 
 
-## Figure 4. Cytopenias over time
+## Figure 3. Cytopenias over time
 
 ```{r Figure 4. Cytopenias over time, fig.width=12, fig.height=7}
 # fig_dat %>% 
@@ -4048,7 +4123,7 @@ c %>% filter(grade == "Grade 3+") %>%
 ```
  
 
-## Figure 5. Cumulative incidence of infection and infection density
+## Figure 4. Cumulative incidence of infection and infection density
 ```{r Figure 5}
 library(tidycmprsk)
 library(ggsurvfit)
@@ -4364,8 +4439,119 @@ risk_comp <- cilta %>%
 #   guides(colour = guide_legend(ncol = 1))
 ```
 
+```{r violin plot}
+cilta %>%
+  mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>% 
+  select(pt_identifier, any_infection, any_sevinfection, date_of_infection, 
+         time_from_infusion_to_infection_days, infection_type_bacterial_viral_fungal_parasitic,
+         infection_type_cat) %>% 
+  mutate(any_sevinfection = case_when(
+    any_sevinfection == "Yes"           ~ "Severe"
+  )) %>% 
+  mutate(any_infection = case_when(
+    any_sevinfection == "Severe"        ~ NA_character_,
+    any_infection == "Yes"              ~ "Not severe"
+  )) %>% 
+  pivot_longer(cols = c(any_infection, any_sevinfection), 
+               names_to = "Infection", 
+               values_to = "Infection severity") %>% 
+  drop_na(`Infection severity`) %>% 
+  mutate(infection_type_cat = str_replace(infection_type_cat, " \\+ ", " and ")) %>% 
+  separate_wider_delim(cols = infection_type_cat, delim = " and ",
+                       names = c("infection_type_cat1", "infection_type_cat2"), 
+                       too_few = "align_start", too_many = "merge", 
+                       cols_remove = TRUE) %>% 
+  pivot_longer(cols = c(infection_type_cat1, infection_type_cat2), 
+               names_to = NULL, 
+               values_to = "Infection categories") %>% 
+  drop_na(`Infection categories`) %>% 
+  ggplot(aes(x = infection_type_bacterial_viral_fungal_parasitic, 
+             y = time_from_infusion_to_infection_days))+
+  geom_violin()+
+  geom_jitter(aes(color = `Infection severity`), width = 0.2)+
+  # geom_point(aes(color = `Infection severity`), position = "jitter")
+  labs(x = NULL, y = "Infection onset time (days)")+
+  scale_color_manual(values = c("black", "red"))+
+  scale_y_continuous(expand = c(0, 5), limits = c(0, 400))
 
-## Figure S1. Viral titers after ide-cel
+cilta %>%
+  mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>% 
+  select(pt_identifier, any_infection, any_sevinfection, date_of_infection, 
+         time_from_infusion_to_infection_days,
+         infection_type_cat) %>% 
+  mutate(any_sevinfection = case_when(
+    any_sevinfection == "Yes"           ~ "Severe"
+  )) %>% 
+  mutate(any_infection = case_when(
+    any_sevinfection == "Severe"        ~ NA_character_,
+    any_infection == "Yes"              ~ "Not severe"
+  )) %>% 
+  pivot_longer(cols = c(any_infection, any_sevinfection), 
+               names_to = "Infection", 
+               values_to = "Infection severity") %>% 
+  drop_na(`Infection severity`) %>% 
+  mutate(infection_type_cat = str_replace(infection_type_cat, "and Respiratory infection", "and Respiratory infections")) %>% 
+  mutate(infection_type_cat = str_replace(infection_type_cat, " \\+ ", " and ")) %>% 
+  separate_wider_delim(cols = infection_type_cat, delim = " and ",
+                       names = c("infection_type_cat1", "infection_type_cat2"), 
+                       too_few = "align_start", too_many = "merge", 
+                       cols_remove = TRUE) %>% 
+  pivot_longer(cols = c(infection_type_cat1, infection_type_cat2), 
+               names_to = NULL, 
+               values_to = "Infection categories") %>% 
+  drop_na(`Infection categories`) %>% 
+  ggplot(aes(x = `Infection categories`, 
+             y = time_from_infusion_to_infection_days))+
+  geom_violin()+
+  geom_jitter(aes(color = `Infection severity`), width = 0.2)+
+  # geom_point(aes(color = `Infection severity`), position = "jitter")
+  labs(x = NULL, y = "Infection onset time (days)")+
+  scale_color_manual(values = c("black", "red"))+
+  scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
+  coord_flip()
+
+cilta %>%
+  mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>%
+  filter(infection_type_bacterial_viral_fungal_parasitic == "Viral") %>%
+  select(pt_identifier, any_infection, any_sevinfection, date_of_infection,
+         time_from_infusion_to_infection_days,
+         viral_category) %>%
+  mutate(any_sevinfection = case_when(
+    any_sevinfection == "Yes"           ~ "Severe"
+  )) %>%
+  mutate(any_infection = case_when(
+    any_sevinfection == "Severe"        ~ NA_character_,
+    any_infection == "Yes"              ~ "Not severe"
+  )) %>%
+  pivot_longer(cols = c(any_infection, any_sevinfection),
+               names_to = "Infection",
+               values_to = "Infection severity") %>%
+  drop_na(`Infection severity`) %>%
+  mutate(viral_category = str_replace(viral_category, ", ", " And ")) %>% 
+  mutate(viral_category = str_replace(viral_category, "Rhinovius", "Rhinovirus")) %>% 
+  mutate(viral_category = str_replace(viral_category, "parainfluenza", "Parainfluenza")) %>% 
+  mutate(viral_category = str_replace(viral_category, "Metapneurmovirus", "Metapneumovirus")) %>% 
+  mutate(viral_category = str_remove(viral_category, "\\? ")) %>% 
+  separate_wider_delim(cols = viral_category, delim = " And ",
+                       names = c("viral_category1", "viral_category2"), 
+                       too_few = "align_start", too_many = "merge", 
+                       cols_remove = FALSE) %>% 
+  pivot_longer(cols = c(viral_category1, viral_category2), 
+               names_to = NULL, 
+               values_to = "Viral categories") %>% 
+  drop_na(`Viral categories`) %>% 
+  ggplot(aes(x = `Viral categories`,
+             y = time_from_infusion_to_infection_days))+
+  geom_violin()+
+  geom_jitter(aes(color = `Infection severity`), width = 0.2)+
+  labs(x = NULL, y = "Infection onset time (days)")+
+  scale_color_manual(values = c("black", "red"))+
+  scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
+  coord_flip()
+```
+
+
+## Figure S3. Viral titers after ide-cel
 Focus on MCC patients / I didn't use day 180 as they are less values but I can add it if you want.
 ```{r Figure S1. Viral titers after ide-cel}
 fig_dat <- cilta %>% 
@@ -4512,7 +4698,7 @@ alluvial_B <- moffitt_subset %>%
   plot_annotation(tag_levels = "A")
 ```
 
-## Figure S2. Pneumococcal titers after ide-cel
+## Figure S4. Pneumococcal titers after ide-cel
 
 Antibody concentration >1.0 is considered long-term protection (immune)
 If antibody concentration ≤1.0 consider negative (not immune)
@@ -4602,7 +4788,7 @@ draw(ht_list, heatmap_legend_side = "bottom")
 ```
 
 
-## MVA and forest plot
+## Table S7 and Figure S2. MVA and forest plot
 Limit to evaluable patients at day 90
 ```{r MVA and forest plot}
 mva_dat <- fig_dat %>% 
@@ -4656,10 +4842,12 @@ glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + `gr3_cytopenia_-5d` +
                  intercept = TRUE) %>%
   add_nevent(location = "level") %>% add_n(location = "level") %>%
   modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
-  bold_p(t = .05) 
+  bold_p(t = .05)
 ```
 
-```{r forest plot}
+
+
+```{r forest plot 5}
 forest_p <- 
   glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + `gr3_cytopenia_-5d` +
         steroid_use_yes_no + number_of_prior_lines_of_therapy + baseline_ferritin_cat,
@@ -4682,6 +4870,50 @@ forest_p <-
     Characteristic == "Steroid Use"      ~ "Steroid use",
     Characteristic == "Number of prior lines of therapy"      ~ "Number of prior lines of therapy",
     Characteristic == "baseline_ferritin_cat"      ~ "Baseline ferritin"
+  ))
+
+ggplot(data=forest_p, aes(y=name, x=OR, xmin=lower, xmax=upper)) +
+  geom_point() + 
+  geom_errorbarh(height=.1) +
+  geom_vline(xintercept=1, color='black', linetype='dashed', alpha=.5) +
+  theme_classic()+
+  scale_x_log10(breaks = c(0, 0.25, 0.5, 1, 2.5, 5, 10, 40))+
+  labs(y="")
+```
+
+```{r MVA 3}
+glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + `gr3_cytopenia_-5d` + 
+      number_of_prior_lines_of_therapy,
+    data = mva_dat,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
+  bold_p(t = .05) 
+```
+
+```{r forest plot 3}
+forest_p <- 
+  glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + `gr3_cytopenia_-5d` +
+        number_of_prior_lines_of_therapy,
+    data = mva_dat,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  as_tibble() %>% 
+  `colnames<-`(str_remove_all(colnames(.), "\\*")) %>% 
+  fill(OR, `95% CI`, .direction = "up") %>% 
+  separate(`95% CI`, into = c("lower", "upper"), sep = ", ") %>% 
+  filter(Characteristic %in% c("High marrow burden (≥50%)",
+                 "gr3_cytopenia_-5d",
+                 "Number of prior lines of therapy") ) %>% 
+  mutate_at(c("OR", "lower", "upper"), ~ as.numeric(.)) %>% 
+  mutate(name= case_when(
+    Characteristic == "High marrow burden (≥50%)"      ~ "High marrow burden (≥50%)",
+    Characteristic == "gr3_cytopenia_-5d"      ~ "Grade ≥ 3 Cytopenia at Day -5",
+    # Characteristic == "Steroid Use"      ~ "Steroid use",
+    Characteristic == "Number of prior lines of therapy"      ~ "Number of prior lines of therapy"
+    # Characteristic == "baseline_ferritin_cat"      ~ "Baseline ferritin"
   ))
 
 ggplot(data=forest_p, aes(y=name, x=OR, xmin=lower, xmax=upper)) +
