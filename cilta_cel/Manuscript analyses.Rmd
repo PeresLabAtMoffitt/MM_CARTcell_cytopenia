@@ -221,7 +221,7 @@ cart <- cart %>%
   ), .names = "is_variable_{.col}")) %>% 
   mutate(across(c(starts_with("marrow_cellularity_") & ends_with("normo_hypo_hyper")), ~ case_when(
     . == "Pauci"                            ~ "Hypo",
-    . == "Variable"                         ~ NA_character_,
+    . == "Variable"                         ~ "Variable", # NA_character_,
     TRUE                                    ~ .
   ))) %>% 
   
@@ -295,49 +295,49 @@ cart <- cart %>%
   rename_at(vars(contains("race")), ~ "race") %>% 
   rename_at(vars(contains("ethnicity")), ~ "ethnicity") %>% 
   mutate(ethnicity = case_when(
-    str_detect(ethnicity, "Non|Not")            ~ "Non-Hispanic/Latino",
-    is.na(ethnicity)                            ~ NA_character_,
-    TRUE                                        ~ "Hispanic/Latino"
+    str_detect(ethnicity, "Non|Not")                 ~ "Non-Hispanic/Latino",
+    is.na(ethnicity)                                 ~ NA_character_,
+    TRUE                                             ~ "Hispanic/Latino"
   )) %>% 
   mutate(race = case_when(
-    str_detect(race, "Other")                   ~ "Other",
-    str_detect(race, "Black")                   ~ "Black",
-    TRUE                                        ~ race
+    str_detect(race, "Other")                        ~ "Other",
+    str_detect(race, "Black")                        ~ "Black",
+    TRUE                                             ~ race
   )) %>% 
   mutate(race_eth = case_when(
-    ethnicity == "Hispanic/Latino"                ~ "Hispanic (any race)",
+    ethnicity == "Hispanic/Latino"                   ~ "Hispanic (any race)",
     TRUE ~ race
   )) %>% 
   # Age categories----
   mutate(agecat = case_when(
-    age < 65                            ~ "< 65 years",
-    age >= 65                           ~ "≥ 65 years"
+    age < 70                                         ~ "< 70 years",
+    age >= 70                                        ~ "≥ 70 years"
   ),
-  agecat = factor(agecat, levels = c("< 65 years", "≥ 65 years"))
+  agecat = factor(agecat, levels = c("< 70 years", "≥ 70 years"))
   ) %>% 
   # Sex categories----
   mutate(sex = case_when(
-    str_detect(sex, "M")                                          ~ "Male",
-    TRUE                                                          ~ "Female"
+    str_detect(sex, "M")                             ~ "Male",
+    !is.na(sex)                                      ~ "Female"
   )) %>% 
   mutate(male_sex = case_when(
-    str_detect(sex, "M")                                          ~ 1,
-    TRUE                                                          ~ 0
+    sex == "Male"                                    ~ 1,
+    sex == "Female"                                  ~ 0
   )) %>% 
   
   # ECOG
-  # mutate(ecog_at_ld = case_when(
-  #   ecog_at_ld == 0 | 
-  #     ecog_at_ld == 1                       ~ "0-1",
-  #   TRUE                                                          ~ ecog_at_ld
-  # )) %>% 
+  mutate(ecog_at_ld = case_when(
+    ecog_at_ld == 0 |
+      ecog_at_ld == 1                                ~ "0-1",
+    ecog_at_ld %in% c(2:4)                           ~ "2-4"
+  )) %>%
   
   # Myeloma
   mutate(oligo_or_non_secretory = case_when(
-    oligo_or_non_secretory == "Non-Secretory" ~ "Yes",
-    oligo_or_non_secretory == "Oligosecretory" ~ "Yes",
-    oligo_or_non_secretory == "Unknown" ~ NA_character_,
-    TRUE ~ oligo_or_non_secretory
+    oligo_or_non_secretory == "Non-Secretory"        ~ "Yes",
+    oligo_or_non_secretory == "Oligosecretory"       ~ "Yes",
+    oligo_or_non_secretory == "Unknown"              ~ NA_character_,
+    TRUE                                             ~ oligo_or_non_secretory
   )) %>%
   # mutate(oligo_or_non_secretory_yes_no = case_when( # is "oligo_or_non_secretory_yes_no" now
   #   `Yes, Oligo or Yes, Non-Secretory` == "Non-Secretory" ~ "Yes",
@@ -367,6 +367,15 @@ cart <- cart %>%
   mutate(gain_amp1q21 = case_when(
     gain_amp1q21 == "No"                                           ~ "No",
     !is.na(gain_amp1q21)                                           ~ "Yes"
+  )) %>% 
+  mutate(cytogenetics_incl_1q = case_when(
+    cytogenetics == "Yes" | 
+      gain_amp1q21 == "Yes"                                        ~ "Yes",
+    deletion_17p_prior_to_car_t_infusion_yes_no == "No" &
+      t_4_14_prior_to_car_t_infusion_yes_no == "No" &
+      t_14_16_prior_to_car_t_infusion_yes_no == "No" &
+      gain_amp1q21 == "No"                                         ~ "No",
+    TRUE                                                           ~ NA_character_
   )) %>% 
   # Refractory status ----
   mutate(lenalidomide_exposed_vs_refractory_vs_not_exposed = case_when(
@@ -482,6 +491,7 @@ cart1 <- cart %>%
              end = last_date_of_gcsf)/
            duration(n=1, units = "days"
   )) %>%
+  mutate(gcsf_duration = last_day_of_gcsf - first_day_of_gcsf) %>% 
   mutate(day_of_stem_cell_boost = interval(
              start = date_of_car_t_infusion, 
              end = date_of_stem_cell_boost)/
@@ -503,6 +513,7 @@ cart1 <- cart %>%
              end = last_date_of_tpo_agonist)/
            duration(n=1, units = "days"
   )) %>% 
+  mutate(tpo_duration = last_day_of_tpo_agonist - first_day_of_tpo_agonist) %>% 
   mutate(first_day_of_ivig = interval(
              start = date_of_car_t_infusion, 
              end = first_date_of_ivig)/
@@ -523,6 +534,7 @@ cart1 <- cart %>%
     last_day_of_ivig >= 0                                          ~ last_day_of_ivig,
     TRUE                                                           ~ NA_real_
     )) %>% 
+  mutate(ivig_duration = last_day_of_ivig - first_day_of_ivig) %>% 
   mutate(need_for_ivig_yes_1_no_0 = case_when(
     first_date_of_ivig < date_of_car_t_infusion |
       last_date_of_ivig < date_of_car_t_infusion                   ~ "No",
@@ -1846,7 +1858,13 @@ cart6 <- cart6 %>%
                   "infection_type_cat"), ~ case_when(
     time_from_infusion_to_infection_days >= 0     ~ .,
     TRUE                                          ~ NA_character_
-  )))
+  ))) %>% 
+  mutate(overall_hlh = case_when(
+    hlh == "Yes" |
+    hlh_hlh_like_toxicities == "Yes"              ~ "Yes",
+    hlh == "No" &
+    hlh_hlh_like_toxicities == "No"               ~ "No"
+  ))
   
 
 # cart7 <- cart6 %>% 
@@ -1857,11 +1875,6 @@ cart6 <- cart6 %>%
 #     notinfused=="NO" & `Infection Type` != "No" ~ "Yes",
 #     notinfused=="NO" & is.na(`Infection Type`) ~ "No",
 #     TRUE ~ NA_character_
-#   )) %>%
-#   mutate(HLH = case_when(
-#     notinfused=="YES" ~ NA_character_,
-#     notinfused=="NO" & `HLH/HLH-Like Toxicities?`=="Yes" ~ "Yes",
-#     TRUE ~ "No"
 #   )) %>%
 #   mutate(infection_type = case_when(
 #     infection=="No" | is.na(infection) ~ NA_character_,
@@ -2061,6 +2074,143 @@ for (i in colnames(cilta %>%
 }
 ```
 
+```{r new cytopenia score}
+cilta <- cilta %>% 
+  mutate(plt_score = case_when(
+    plt_day_5_k_ul > 175                             ~ 0,
+    plt_day_5_k_ul >= 75                             ~ 1,
+    plt_day_5_k_ul < 175                             ~ 2
+  )) %>% 
+  mutate(anc_score = case_when(
+    (anc_day_5_k_ul * 1000) >= 1200                  ~ 0,
+    (anc_day_5_k_ul * 1000) < 1200                   ~ 1
+  )) %>% 
+  mutate(hb_score = case_when(
+    hb_day_5 >= 9                                    ~ 0,
+    hb_day_5 < 9                                     ~ 1
+  )) %>% 
+  mutate(crp_score = case_when(
+    # Jenn comment : CRP=3 should be 1 point
+    crp_pre_leukapheresis >= 3                       ~ 1,
+    crp_pre_leukapheresis < 3                        ~ 0
+  )) %>% 
+  mutate(ferritin_score = case_when(
+    ferritin_at_pre_leukapheresis < 650              ~ 0,
+    ferritin_at_pre_leukapheresis <= 2000            ~ 1,
+    ferritin_at_pre_leukapheresis > 2000             ~ 2
+  )) %>% 
+  # Need to make 2 different sum for when pre LD data is NA
+  mutate(ht_sum_score_with_missing = rowSums(
+    select(.,plt_score:ferritin_score), 
+                            na.rm = TRUE
+  )) %>% 
+  mutate(ht_sum_score = rowSums(
+    select(.,plt_score:ferritin_score), 
+                            na.rm = FALSE
+  )) %>% 
+  mutate(ht_score = case_when(
+    # If pre LD data is NA but score is ≥ 2 then we can still include as High
+    (is.na(crp_score) |
+       is.na(ferritin_score)) &
+      ht_sum_score_with_missing >= 2                 ~ "High",
+    ht_sum_score < 2                                 ~ "Low",
+    ht_sum_score >= 2                                ~ "High"
+  ), ht_score = factor(ht_score, levels = c("Low", "High"))) %>% 
+  mutate(early_icaht_cat = case_when(
+    # ANC ≤ 100 at three consecutive timepoints
+    (((anc_day_0_k_u_l * 1000) <= 100 &
+        (anc_day_7 * 1000) <= 100 &
+        (anc_day_14 * 1000) <= 100) |
+       ((anc_day_7 * 1000) <= 100 &
+          (anc_day_14 * 1000) <= 100 &
+          (anc_day_21 * 1000) <= 100) |
+       ((anc_day_14 * 1000) <= 100 &
+          (anc_day_21 * 1000) <= 100 &
+          (anc_day_30 * 1000) <= 100)) |
+      # ANC never above 500 in first 30 days
+      ((anc_day_0_k_u_l * 1000) <= 500 &
+         (anc_day_7 * 1000) <= 500 &
+         (anc_day_14 * 1000) <= 500 &
+         (anc_day_21 * 1000) <= 500 &
+         (anc_day_30 * 1000) <= 500)                 ~ "Grade 4",
+    
+    # ANC ≤ 500 at three consecutive timepoints
+    ((anc_day_0_k_u_l * 1000) <= 500 &
+       (anc_day_7 * 1000) <= 500 &
+       (anc_day_14 * 1000) <= 500) |
+      ((anc_day_7 * 1000) <= 500 &
+         (anc_day_14 * 1000) <= 500 &
+         (anc_day_21 * 1000) <= 500) |
+      ((anc_day_14 * 1000) <= 500 &
+         (anc_day_21 * 1000) <= 500 &
+         (anc_day_30 * 1000) <= 500) |
+      # ANC ≤ 100 at two consecutive timepoints
+      ((anc_day_0_k_u_l * 1000) <= 100 &
+         (anc_day_7 * 1000) <= 100) |
+      ((anc_day_7 * 1000) <= 100 &
+         (anc_day_14 * 1000) <= 100) |
+      ((anc_day_14 * 1000) <= 100 &
+         (anc_day_21 * 1000) <= 100) |
+      ((anc_day_21 * 1000) <= 100 &
+         (anc_day_30 * 1000) <= 100)                 ~ "Grade 3",
+    
+    # ANC ≤ 500 at two consecutive timepoints
+    ((anc_day_0_k_u_l * 1000) <= 500 &
+       (anc_day_7 * 1000) <= 500) |
+      ((anc_day_7 * 1000) <= 500 &
+         (anc_day_14 * 1000) <= 500) |
+      ((anc_day_14 * 1000) <= 500 &
+         (anc_day_21 * 1000) <= 500) |
+      ((anc_day_21 * 1000) <= 500 &
+         (anc_day_30 * 1000) <= 500)                 ~ "Grade 2",
+    
+    # ANC ≤ 500 at one timepoint
+    (anc_day_0_k_u_l * 1000) <= 500 |
+      (anc_day_7 * 1000) <= 500 |
+      (anc_day_14 * 1000) <= 500 |
+      (anc_day_21 * 1000) <= 500 |
+      (anc_day_30 * 1000) <= 500                     ~ "Grade 1",
+    !is.na(anc_day_0_k_u_l) &
+      !is.na(anc_day_7) &
+      !is.na(anc_day_14) &
+      !is.na(anc_day_21) &
+      !is.na(anc_day_30)                             ~ "No early ICAHT"
+  )) %>% 
+  mutate(any_early_icaht = case_when(
+    early_icaht_cat == "No early ICAHT"              ~ "No",
+    TRUE                                             ~ "Yes"
+  )) %>% 
+  mutate(gr3_early_icaht = case_when(
+    early_icaht_cat == "No early ICAHT"              ~ "No",
+    early_icaht_cat == "Grade 3" |
+      early_icaht_cat == "Grade 4"                   ~ "Yes",
+    TRUE                                             ~ "No"
+  )) %>% 
+  mutate(late_icaht_cat = case_when(
+    (anc_day_90 * 1000) <= 100                       ~ "Grade 4",
+    (anc_day_90 * 1000) <= 500                       ~ "Grade 3",
+    (anc_day_90 * 1000) <= 1000                      ~ "Grade 2",
+    (anc_day_90 * 1000) <= 1500                      ~ "Grade 1",
+    !is.na(anc_day_90)                               ~ "No late ICAHT"
+  )) %>% 
+  mutate(any_late_icaht = case_when(
+    late_icaht_cat == "No late ICAHT"                ~ "No",
+    !is.na(late_icaht_cat)                           ~ "Yes",
+    TRUE                                             ~ NA_character_
+  )) %>% 
+  mutate(gr3_late_icaht = case_when(
+    late_icaht_cat == "Grade 3" |
+      late_icaht_cat == "Grade 4"                    ~ "Yes",
+    !is.na(late_icaht_cat)                           ~ "No",
+    TRUE                                             ~ NA_character_
+  ))# %>% 
+  # mutate_at(c("anc_day_0_k_u_l", "anc_day_7", 
+  #             "anc_day_14", "anc_day_21",
+  #             "anc_day_30", "anc_day_90"), ~ . * 1000)
+a <- cilta %>% select(pt_identifier, anc_day_0_k_u_l, anc_day_7, anc_day_14, anc_day_21, anc_day_30, early_icaht_cat, any_early_icaht, gr3_early_icaht, late_icaht_cat,  any_late_icaht, gr3_late_icaht, anc_day_90)
+a <- cilta %>% select(pt_identifier,  plt_score, plt_day_5_k_ul, anc_score, anc_day_5_k_ul, hb_score, hb_day_5, crp_score, crp_pre_leukapheresis, ferritin_score, ferritin_at_pre_leukapheresis, ht_score, ht_sum_score, ht_sum_score_with_missing)
+```
+
 
 ```{r Labeling}
 ## Labeling ----
@@ -2075,6 +2225,7 @@ var_label(cilta) <- list(age = "Patient age", agecat = "Patient age - Categories
                          # `ECOG > or = 2? (Yes, No)` ,
                          r_iss_at_car_t_infusion = "R-ISS at cart infusion",
                          cytogenetics = "High risk cytogenetics (not include gain 1q)", 
+                         cytogenetics_incl_1q = "High risk cytogenetics (including gain 1q)",
                          deletion_17p_prior_to_car_t_infusion_yes_no = "Deletion 17p at Infusion", 
                          t_4_14_prior_to_car_t_infusion_yes_no = "t(4:14) at Infusion", 
                          t_14_16_prior_to_car_t_infusion_yes_no = "t(4:16) at Infusion", 
@@ -2118,7 +2269,7 @@ var_label(cilta) <- list(age = "Patient age", agecat = "Patient age - Categories
                            "Other/Delayed Non-Parkinsonian Neurologic Toxicity",
                          delayed_neuro_type = "Delayed Neurotoxicity Type",
                          hlh = "HLH", hlh_hlh_like_toxicities = "HLH/HLH-Like Toxicities?",
-                         
+                         overall_hlh = "Combined HLHs",
                          tbv = "TBV", whole_blood_processed_m_l = "Whole blood processed (mL)",
                          final_collection_volume_m_l = "Final collection volume (mL)", 
                          tbv_processed = "TBV processed", 
@@ -2128,6 +2279,13 @@ var_label(cilta) <- list(age = "Patient age", agecat = "Patient age - Categories
                          total_dose_volume_m_l = "Total dose volume (mL)", 
                          cell_dose_million_cells = "Total cell dose (million cells)",
                          best_ORRcollapsed = "Best ORR at ≤ 12 months",
+                         
+                         ht_score = "CAR-HEMATOTOX score",
+                         any_early_icaht = "Any Early ICAHT",
+                         gr3_early_icaht = "Grade3+ Early ICAHT",
+                         any_late_icaht = "Any Late ICAHT",
+                         gr3_late_icaht = "Grade3+ Late ICAHT",
+                         
                          did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no =
                            "Did patient meet cartitude criteria"#,
                          # best_response = "Best response in first 90 days"
@@ -2203,7 +2361,8 @@ cilta %>%
          extramedullary_disease_yes_no, 
          high_marrow_burden_50_percent, ecog_at_ld, 
          r_iss_at_car_t_infusion, 
-         cytogenetics, deletion_17p_prior_to_car_t_infusion_yes_no,
+         cytogenetics, cytogenetics_incl_1q,
+         deletion_17p_prior_to_car_t_infusion_yes_no,
          t_4_14_prior_to_car_t_infusion_yes_no,
          t_14_16_prior_to_car_t_infusion_yes_no, gain_amp1q21,
          bridging_therapy_yes_no,
@@ -2211,19 +2370,28 @@ cilta %>%
          prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
          Prior_bcma_therapy,
          immuno, proteasome, dara, doubleref, tripleref, pentaref, 
-         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no) %>% 
+         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
+         ht_score, early_icaht_cat, any_early_icaht,
+         gr3_early_icaht, 
+         late_icaht_cat, any_late_icaht,
+         gr3_late_icaht) %>% 
   tbl_summary(
     type = list(
       c(agecat, sex, 
         extramedullary_disease_yes_no, high_marrow_burden_50_percent,
-        cytogenetics, deletion_17p_prior_to_car_t_infusion_yes_no,
+        cytogenetics, cytogenetics_incl_1q,
+        deletion_17p_prior_to_car_t_infusion_yes_no,
         t_4_14_prior_to_car_t_infusion_yes_no,
         t_14_16_prior_to_car_t_infusion_yes_no, gain_amp1q21,
         bridging_therapy_yes_no, prior_auto_sct_yes_no,
         Prior_bcma_therapy,
         # `Received alkylating therapy with bridging (Yes=1, No=0)`,
         immuno, proteasome, dara, doubleref, tripleref, pentaref,
-        did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no)
+        did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
+        ht_score, early_icaht_cat, any_early_icaht,
+         gr3_early_icaht, 
+         late_icaht_cat, any_late_icaht,
+         gr3_late_icaht)
       ~"categorical"),
     
     statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
@@ -2249,17 +2417,20 @@ tbl1 <- cilta %>%
          parkinsonian_neurotoxicity_yes_no,
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
-         hlh, hlh_hlh_like_toxicities) %>% 
+         hlh, hlh_hlh_like_toxicities,
+         overall_hlh) %>% 
   tbl_summary(type = list(
     c(day_of_onset_crs_relative_to_infusion,
-         day_of_max_crs_relative_to_infusion,
-         duration_of_crs_days,
+      day_of_max_crs_relative_to_infusion,
+      duration_of_crs_days,
       day_of_onset_icans_relative_to_infusion,
-         day_of_max_icans_relative_to_infusion,
-         duration_of_icans_days) ~ "continuous",
+      day_of_max_icans_relative_to_infusion,
+      duration_of_icans_days) ~ "continuous",
     c(delayed_neuro,
-         parkinsonian_neurotoxicity_yes_no,
-         other_delayed_non_parkinsonian_neurologic_toxicity_yes_no) 
+      parkinsonian_neurotoxicity_yes_no,
+      other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
+      hlh, hlh_hlh_like_toxicities,
+      overall_hlh) 
     ~ "categorical"),
     statistic=list(all_continuous() ~ "{median} ({min}, {max})"),
     digits = all_continuous() ~ 1,
@@ -2383,7 +2554,8 @@ cilta %>%
   bold_labels() %>% add_stat_label()
 ```
  
-## Table 3. Cytopenias following ide-cel
+## Table 3 A-B. Cytopenias following ide-cel
+Evaluable patients (who survived and did not progressed) are included for each time points.
 ```{r Table 3}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2444,6 +2616,7 @@ tbl3 <- cilta %>%
 
 tbl4 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (7 / 30.417)) %>% 
   select("Leukopenia" = Leukopenia_7d, 
          "Grade3+ Leukopenia" = gr3_Leukopenia_7d, 
          "Neutropenia" = Neutropenia_7d, 
@@ -2463,8 +2636,7 @@ tbl4 <- cilta %>%
 
 tbl5 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  # filter(is.na(Not_evaluable_at_14days)) %>% ######################### Fix evaluable---------- here
-  filter(os_from_infusion_months > (14 / 30.417)) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (14 / 30.417)) %>% 
 select("Leukopenia" = Leukopenia_14d, 
        "Grade3+ Leukopenia" = gr3_Leukopenia_14d, 
        "Neutropenia" = Neutropenia_14d, 
@@ -2484,8 +2656,7 @@ select("Leukopenia" = Leukopenia_14d,
 
 tbl6 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  # filter(is.na(Not_evaluable_at_21days)) %>% 
-  filter(os_from_infusion_months > (21 / 30.417)) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (21 / 30.417)) %>% 
   select("Leukopenia" = Leukopenia_21d,
          "Grade3+ Leukopenia" = gr3_Leukopenia_21d, 
          "Neutropenia" = Neutropenia_21d, 
@@ -2505,8 +2676,7 @@ tbl6 <- cilta %>%
 
 tbl7 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  # filter(is.na(Not_evaluable_at_30days)) %>% 
-  filter(os_from_infusion_months > (30 / 30.417)) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (30 / 30.417)) %>% 
   select("Leukopenia" = Leukopenia_30d, 
          "Grade3+ Leukopenia" = gr3_Leukopenia_30d,
          "Neutropenia" = Neutropenia_30d, 
@@ -2526,8 +2696,7 @@ tbl7 <- cilta %>%
 
 tbl8 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  # filter(is.na(Not_evaluable_at_90days)) %>% 
-  filter(os_from_infusion_months > 3) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 3) %>% 
   select("Leukopenia" = Leukopenia_90d, 
          "Grade3+ Leukopenia" = gr3_Leukopenia_90d,
          "Neutropenia" = Neutropenia_90d, 
@@ -2547,8 +2716,7 @@ tbl8 <- cilta %>%
 
 tbl9 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  # filter(is.na(Not_evaluable_at_180days)) %>% 
-  filter(os_from_infusion_months > 6) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 6) %>% 
   select("Leukopenia" = Leukopenia_180d, 
          "Grade3+ Leukopenia" = gr3_Leukopenia_180d,
          "Neutropenia" = Neutropenia_180d, 
@@ -2574,6 +2742,136 @@ tbl_merge(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8, tbl9),
 #                            1 patient has missing 90 days values**"))
 ```
 
+```{r}
+tbl1 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl2 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl3 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl4 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (7 / 30.417)) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl5 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (14 / 30.417)) %>% 
+select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl6 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (21 / 30.417)) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl7 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (30 / 30.417)) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl8 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 3) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl9 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 6) %>% 
+  select(any_early_icaht, 
+         gr3_early_icaht, 
+         any_late_icaht, 
+         gr3_late_icaht
+  ) %>% 
+  tbl_summary(type = list(everything() ~ "dichotomous"),
+              digits = all_continuous() ~ 1,
+              missing = "no"
+  ) %>% 
+  bold_labels() %>% add_stat_label()
+
+tbl_merge(list(tbl1, tbl2, tbl3, tbl4, tbl5, tbl6, tbl7, tbl8, tbl9), 
+          tab_spanner = c("Apheresis", "Day -5", "Day 0", 
+                          "Day 7", "Day 14", "Day 21",
+                          "Day 30", "Day 90", "Day 180"))
+```
+
 ## Table 4. Bone marrow biopsy findings
 ```{r Table 4}
 tbl1 <- cilta %>% 
@@ -2581,7 +2879,7 @@ tbl1 <- cilta %>%
   select("marrow cellularity" = marrow_cellularity_baseline_normo_hypo_hyper, 
          "marrow cellularity (%)" = marrow_cellularity_baseline_percent,
          "% CD138 positive by IHC" = marrow_cd138_baseline_percent,
-         "is cellularity variable?"= contains("marrow_cellularity_baseline") & contains("is_variable_"),
+         # "is cellularity variable?"= contains("marrow_cellularity_baseline") & contains("is_variable_"),
          "Fibrosis grade" = marrow_fibrosis_baseline_0_1_2_3, 
          "Dysplasia present" = marrow_dysplasia_baseline_yes_no
   ) %>% 
@@ -2591,17 +2889,18 @@ tbl1 <- cilta %>%
     c("Dysplasia present") ~ "categorical"
   ),
   statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-  digits = all_continuous() ~ 1,
-  missing = "no") %>% 
+  digits = all_continuous() ~ 1#,
+  # missing = "no"
+  ) %>% 
   bold_labels() %>% add_stat_label()
 
 tbl2 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  filter(os_from_infusion_months > (30 / 30.417)) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > (30 / 30.417)) %>% 
   select("marrow cellularity" = marrow_cellularity_day_30_normo_hypo_hyper, 
          "marrow cellularity (%)" = marrow_percent_cellularity_day_30,
          "% CD138 positive by IHC" = marrow_percent_cd138_day_30, 
-         "is cellularity variable?"= contains("marrow_cellularity_day_30") & contains("is_variable_"),
+         # "is cellularity variable?"= contains("marrow_cellularity_day_30") & contains("is_variable_"),
          "Fibrosis grade" = marrow_fibrosis_day_30_0_1_2_3, 
          "Dysplasia present" = marrow_dysplasia_day_30_yes_no
   ) %>% 
@@ -2611,17 +2910,18 @@ tbl2 <- cilta %>%
     c("Dysplasia present") ~ "categorical"
   ),
   statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-  digits = all_continuous() ~ 1,
-  missing = "no") %>% 
+  digits = all_continuous() ~ 1#,
+  # missing = "no"
+  ) %>% 
   bold_labels() %>% add_stat_label()
 
 tbl3 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  filter(os_from_infusion_months > 3) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 3) %>% 
   select("marrow cellularity" = marrow_cellularity_day_90_normo_hypo_hyper, 
          "marrow cellularity (%)" = marrow_percent_cellularity_day_90,
          "% CD138 positive by IHC" = marrow_percent_cd138_day_90, 
-         "is cellularity variable?"= contains("marrow_cellularity_day_90") & contains("is_variable_"),
+         # "is cellularity variable?"= contains("marrow_cellularity_day_90") & contains("is_variable_"),
          "Fibrosis grade" = marrow_fibrosis_day_90_0_1_2_3, 
          "Dysplasia present" = marrow_dysplasia_day_90_yes_no
   ) %>% 
@@ -2631,17 +2931,18 @@ tbl3 <- cilta %>%
     c("Dysplasia present") ~ "categorical"
   ),
   statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-  digits = all_continuous() ~ 1,
-  missing = "no") %>% 
+  digits = all_continuous() ~ 1#,
+  # missing = "no"
+  ) %>% 
   bold_labels() %>% add_stat_label()
 
 tbl4 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  filter(os_from_infusion_months > 6) %>% 
+  filter(pfs_event == 0 | pfs_from_infusion_months > 6) %>% 
   select("marrow cellularity" = marrow_cellularity_day_180_normo_hypo_hyper, 
          "marrow cellularity (%)" = marrow_percent_cellularity_day_180,
          "% CD138 positive by IHC" = marrow_percent_cd138_day_180, 
-         "is cellularity variable?"= contains("marrow_cellularity_day_180") & contains("is_variable_"),
+         # "is cellularity variable?"= contains("marrow_cellularity_day_180") & contains("is_variable_"),
          "Fibrosis grade" = marrow_fibrosis_day_180_0_1_2_3, 
          "Dysplasia present" = marrow_dysplasia_day_180_yes_no
   ) %>% 
@@ -2651,8 +2952,9 @@ tbl4 <- cilta %>%
     c("Dysplasia present") ~ "categorical"
   ),
   statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
-  digits = all_continuous() ~ 1,
-  missing = "no") %>% 
+  digits = all_continuous() ~ 1#,
+  # missing = "no"
+  ) %>% 
   bold_labels() %>% add_stat_label()
 
 
@@ -2671,7 +2973,8 @@ tbl1 <- cilta %>%
 
 tbl1_1 <- cilta %>%
   distinct(pt_identifier, .keep_all = TRUE) %>%
-  select(first_day_of_gcsf, last_day_of_gcsf) %>%
+  select(first_day_of_gcsf, last_day_of_gcsf,
+         gcsf_duration) %>%
   tbl_summary(type = list(
     everything() ~ "continuous"),
     statistic=list(all_continuous() ~ "{median} ({min}, {max})"),
@@ -2735,7 +3038,8 @@ tbl5 <- cilta %>%
 
 tbl5_1 <- cilta %>%
   distinct(pt_identifier, .keep_all = TRUE) %>%
-  select(first_day_of_tpo_agonist, last_day_of_tpo_agonist) %>%
+  select(first_day_of_tpo_agonist, last_day_of_tpo_agonist,
+         tpo_duration) %>%
   tbl_summary(type = list(
     everything() ~ "continuous"),
     statistic=list(all_continuous() ~ "{median} ({min}, {max})"),
@@ -2751,7 +3055,8 @@ tbl6 <- cilta %>%
 
 tbl6_1 <- cilta %>%
   distinct(pt_identifier, .keep_all = TRUE) %>%
-  select(first_day_of_ivig, last_day_of_ivig) %>%
+  select(first_day_of_ivig, last_day_of_ivig,
+         ivig_duration) %>%
   tbl_summary(type = list(
     everything() ~ "continuous"),
     statistic=list(all_continuous() ~ "{median} ({min}, {max})"),
@@ -2763,7 +3068,7 @@ tbl_stack(list(tbl1, tbl1_1, tbl2, tbl2_1, tbl3, tbl3_1,
                tbl4, tbl4_1, tbl5, tbl5_1, tbl6, tbl6_1))
 ```
 
-## Table S4. Patient characteristics by grade 3+ cytopenia at Day 30
+## Table S4a. Patient characteristics by grade 3+ cytopenia at Day 30
 ```{r Patient characteristics by grade 3+ cytopenia at Day 30}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2782,7 +3087,8 @@ cilta %>%
          os_from_infusion_months, age, agecat, male_sex, sex,
          extramedullary_disease_yes_no, 
          high_marrow_burden_50_percent, ecog_at_ld, 
-         r_iss_at_car_t_infusion, cytogenetics, 
+         r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
          bridging_therapy_yes_no,
          # `Received alkylating therapy with bridging (Yes=1, No=0)`,
          prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
@@ -2798,13 +3104,14 @@ cilta %>%
          gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
          `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
          `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+         ht_score,
          gr3_cytopenia_30d) %>% 
   tbl_summary(by = gr3_cytopenia_30d,
               type = list(
                 c(extramedullary_disease_yes_no,
                   bm_plasma_cell_percent_at_pre_ld,
                   cytopenia_apheresis,`cytopenia_-5d`,
-                  cytogenetics,
+                  cytogenetics, cytogenetics_incl_1q,
                   bridging_therapy_yes_no,
                   # `Received alkylating therapy with bridging (Yes=1, No=0)`,
                   prior_auto_sct_yes_no,
@@ -2819,6 +3126,7 @@ cilta %>%
                   gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
                   `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
                   `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+                  ht_score,
                   did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no)
                 ~"categorical",
                 c(bm_plasma_cell_percent_at_pre_ld,
@@ -2831,7 +3139,78 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Cytopenia at days 30?**")
 ```
 
-## Table S5. Patient characteristics by grade 3+ cytopenia at Day 90
+## Table S4b. Patient characteristics by ANY early ICAHT
+```{r Patient characteristics by grade 3+ early ICAHT}
+cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(bm_plasma_cell_percent_at_pre_ld,
+         number_of_prior_lines_of_therapy,
+         number_prior_lines_therapy,
+         # `Days from last bridging to CAR-T infusion`,         ################# Not in data?
+         lenalidomide_exposed_vs_refractory_vs_not_exposed,
+         bortezomib_exposed_vs_refractory_vs_not_exposed,
+         carfilzomib_exposed_vs_refractory_vs_not_exposed,
+         pomalidomide_exposed_vs_refractory_vs_not_exposed,
+         # daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed,
+         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+         "Marrow Cellularity (%) at Day30" = marrow_percent_cellularity_day_30,
+         os_from_infusion_months, age, agecat, male_sex, sex,
+         extramedullary_disease_yes_no, 
+         high_marrow_burden_50_percent, ecog_at_ld, 
+         r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
+         bridging_therapy_yes_no,
+         # `Received alkylating therapy with bridging (Yes=1, No=0)`,
+         prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
+         # prior_treatment_with_any_gene_therapy_based_therapeutic_or_investigational_cellular_therapy_or_bcma_targeted_therapy_yes_no,
+         Prior_bcma_therapy,
+         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
+         cytopenia_apheresis, Neutropenia_apheresis,
+         Anemia_apheresis,Thrombocytopenia_apheresis,
+         `cytopenia_-5d`, `Neutropenia_-5d`,
+         `Anemia_-5d`, `Thrombocytopenia_-5d`,
+         gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+         gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+         `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+         `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+         ht_score,
+         any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+              type = list(
+                c(extramedullary_disease_yes_no,
+                  bm_plasma_cell_percent_at_pre_ld,
+                  cytopenia_apheresis,`cytopenia_-5d`,
+                  cytogenetics, cytogenetics_incl_1q,
+                  bridging_therapy_yes_no,
+                  # `Received alkylating therapy with bridging (Yes=1, No=0)`,
+                  prior_auto_sct_yes_no,
+                  Prior_bcma_therapy,
+                  immuno, proteasome, dara,
+                  doubleref, tripleref, pentaref,
+                  cytopenia_apheresis, Neutropenia_apheresis,
+                  Anemia_apheresis,Thrombocytopenia_apheresis,
+                  `cytopenia_-5d`, `Neutropenia_-5d`,
+                  `Anemia_-5d`, `Thrombocytopenia_-5d`,
+                  gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+                  gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+                  `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+                  `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+                  ht_score,
+                  did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no)
+                ~"categorical",
+                c(bm_plasma_cell_percent_at_pre_ld,
+                  number_of_prior_lines_of_therapy, `Marrow Cellularity (%) at Day30`)
+                ~ "continuous"),
+              statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+              digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% 
+  modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Early ICAHT**")
+```
+
+## Table S5a. Patient characteristics by grade 3+ cytopenia at Day 90
 ```{r Patient characteristics by grade 3+ cytopenia at Day 90}
 cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2850,7 +3229,8 @@ cilta %>%
          os_from_infusion_months,
          age, agecat, male_sex, sex,
          extramedullary_disease_yes_no, 
-         high_marrow_burden_50_percent, ecog_at_ld, r_iss_at_car_t_infusion, cytogenetics, 
+         high_marrow_burden_50_percent, ecog_at_ld, r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
          bridging_therapy_yes_no,
          # `Received alkylating therapy with bridging (Yes=1, No=0)`,
          prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
@@ -2865,13 +3245,14 @@ cilta %>%
          gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
          `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
          `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+         ht_score,
          gr3_cytopenia_90d) %>% 
   tbl_summary(by = gr3_cytopenia_90d,
               type = list(
                 c(extramedullary_disease_yes_no,
                   bm_plasma_cell_percent_at_pre_ld,
                   cytopenia_apheresis,`cytopenia_-5d`,
-                  cytogenetics,
+                  cytogenetics, cytogenetics_incl_1q,
                   bridging_therapy_yes_no,
                   # `Received alkylating therapy with bridging (Yes=1, No=0)`,
                   prior_auto_sct_yes_no,
@@ -2885,6 +3266,7 @@ cilta %>%
                   gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
                   `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
                   `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+                  ht_score,
                   did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no)
                 ~ "categorical",
                 c(bm_plasma_cell_percent_at_pre_ld,
@@ -2897,8 +3279,77 @@ cilta %>%
   modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Cytopenia at days 90?**")
 ```
 
+## Table S5b. Patient characteristics by ANY late ICAHT
+```{r Patient characteristics by grade 3+ late ICAHT}
+cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_90days)) %>%  ######################### Fix evaluable----------
+  select(bm_plasma_cell_percent_at_pre_ld,
+         number_of_prior_lines_of_therapy,
+         number_prior_lines_therapy,
+         # `Days from last bridging to CAR-T infusion`,
+         lenalidomide_exposed_vs_refractory_vs_not_exposed,
+         bortezomib_exposed_vs_refractory_vs_not_exposed,
+         carfilzomib_exposed_vs_refractory_vs_not_exposed,
+         pomalidomide_exposed_vs_refractory_vs_not_exposed,
+         # daratumumab_or_isatuximab_cd38_m_ab_exposed_vs_refractory_vs_not_exposed,
+         immuno, proteasome, dara, doubleref, tripleref, pentaref, 
+         "Marrow Cellularity (%) at Day90" = marrow_percent_cellularity_day_90,
+         os_from_infusion_months,
+         age, agecat, male_sex, sex,
+         extramedullary_disease_yes_no, 
+         high_marrow_burden_50_percent, ecog_at_ld, r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
+         bridging_therapy_yes_no,
+         # `Received alkylating therapy with bridging (Yes=1, No=0)`,
+         prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
+         # prior_treatment_with_any_gene_therapy_based_therapeutic_or_investigational_cellular_therapy_or_bcma_targeted_therapy_yes_no,
+         Prior_bcma_therapy,
+         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
+         cytopenia_apheresis, Neutropenia_apheresis,
+         Anemia_apheresis,Thrombocytopenia_apheresis,
+         `cytopenia_-5d`, `Neutropenia_-5d`,
+         `Anemia_-5d`, `Thrombocytopenia_-5d`,
+         gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+         gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+         `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+         `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+         ht_score,
+         any_late_icaht) %>% 
+  tbl_summary(by = any_late_icaht,
+              type = list(
+                c(extramedullary_disease_yes_no,
+                  bm_plasma_cell_percent_at_pre_ld,
+                  cytopenia_apheresis,`cytopenia_-5d`,
+                  cytogenetics, cytogenetics_incl_1q,
+                  bridging_therapy_yes_no,
+                  # `Received alkylating therapy with bridging (Yes=1, No=0)`,
+                  prior_auto_sct_yes_no,
+                  immuno, proteasome, dara,
+                  doubleref, tripleref, pentaref,
+                  cytopenia_apheresis, Neutropenia_apheresis,
+                  Anemia_apheresis,Thrombocytopenia_apheresis,
+                  `cytopenia_-5d`, `Neutropenia_-5d`,
+                  `Anemia_-5d`, `Thrombocytopenia_-5d`,
+                  gr3_cytopenia_apheresis, gr3_Neutropenia_apheresis,
+                  gr3_Anemia_apheresis, gr3_Thrombocytopenia_apheresis,
+                  `gr3_cytopenia_-5d`, `gr3_Neutropenia_-5d`,
+                  `gr3_Anemia_-5d`, `gr3_Thrombocytopenia_-5d`,
+                  ht_score,
+                  did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no)
+                ~ "categorical",
+                c(bm_plasma_cell_percent_at_pre_ld,
+                  number_of_prior_lines_of_therapy, `Marrow Cellularity (%) at Day90`)
+                ~ "continuous"),
+              statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+              digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>%  add_p() %>% 
+  modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Late ICAHT**")
+```
 
-## Table S6. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
+
+## Table S6a. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30
 ```{r CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ cytopenia at Day 30}
 tbl1 <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
@@ -2917,6 +3368,7 @@ tbl1 <- cilta %>%
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
          hlh, hlh_hlh_like_toxicities,
+         overall_hlh,
          gr3_cytopenia_30d) %>% 
   tbl_summary(by = gr3_cytopenia_30d,
               type = list(
@@ -2928,7 +3380,9 @@ tbl1 <- cilta %>%
                   duration_of_icans_days) ~ "continuous",
                 c(delayed_neuro,
                   other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
-                  parkinsonian_neurotoxicity_yes_no) ~ "categorical"),
+                  parkinsonian_neurotoxicity_yes_no,
+                  hlh, hlh_hlh_like_toxicities,
+                  overall_hlh) ~ "categorical"),
               statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
     digits = all_continuous() ~ 1,
     missing = "no") %>% 
@@ -3024,6 +3478,103 @@ tbl7 <- cilta %>%
 #               digits = all_continuous() ~ 1,
 #               missing = "no") %>% 
 #   bold_labels() %>% add_stat_label() %>% add_p()
+
+tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
+```
+
+## Table S6b. CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by ANY early ICAHT
+```{r CRS, ICANS, tocilizumab use, steroid use, anakinra use and bridging therapy by grade 3+ early ICAHT}
+tbl1 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(cell_dose_million_cells,
+         CRS_gradecat,
+         day_of_onset_crs_relative_to_infusion,
+         day_of_max_crs_relative_to_infusion,
+         duration_of_crs_days, 
+         ICANS_gradecat,
+         day_of_onset_icans_relative_to_infusion,
+         day_of_max_icans_relative_to_infusion,
+         duration_of_icans_days, 
+         delayed_neuro,
+         parkinsonian_neurotoxicity_yes_no,
+         other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
+         delayed_neuro_type,
+         hlh, hlh_hlh_like_toxicities,
+         overall_hlh,
+         any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+              type = list(
+                c(day_of_onset_crs_relative_to_infusion,
+                  day_of_max_crs_relative_to_infusion,
+                  duration_of_crs_days,
+                  day_of_onset_icans_relative_to_infusion,
+                  day_of_max_icans_relative_to_infusion,
+                  duration_of_icans_days) ~ "continuous",
+                c(delayed_neuro,
+                  other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
+                  parkinsonian_neurotoxicity_yes_no,
+                  hlh, hlh_hlh_like_toxicities,
+                  overall_hlh) ~ "categorical"),
+              statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1,
+    missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% 
+  modify_spanning_header(all_stat_cols() ~ "**Grade 3+ Early ICAHT**")
+
+tbl2 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(steroid_use_yes_no, tocilizumab_yes_no, 
+         anakinra_yes_no, any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+              type = list(
+    c(steroid_use_yes_no, tocilizumab_yes_no, 
+      anakinra_yes_no) ~ "categorical"),
+    statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p()
+
+tbl3 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(#day_30_mrd_by_clono_seq_positive_vs_negative,
+         ORR_30days, CRorbetter_30days,
+         # day30_response_v2, 
+         any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+    #           type = list(
+    # c(day_30_mrd_by_clono_seq_positive_vs_negative) ~ "categorical"),
+    digits = all_continuous() ~ 1,
+    missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% add_p()
+
+tbl5 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(#MRD_mon3,
+         ORR_mon3, CRorbetter_mon3,
+         # mon3_response_v2, 
+         any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+    #           type = list(
+    # c(MRD_mon3) ~ "categorical"),
+    digits = all_continuous() ~ 1,
+    missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% add_p()
+
+tbl7 <- cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  # filter(is.na(Not_evaluable_at_30days)) %>% ######################### Fix evaluable----------
+  select(best_response, best_ORRcollapsed,
+         any_early_icaht) %>% 
+  tbl_summary(by = any_early_icaht,
+              #type = list(c(MRD_mon3) ~ "categorical"),
+              label = list(best_response ~ "best response in the first 90 days"),
+              digits = all_continuous() ~ 1,
+              missing = "no") %>% 
+  bold_labels() %>% add_stat_label() %>% add_p()
+
 
 tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
 ```
@@ -3236,11 +3787,21 @@ tbl_stack(list(tbl1, tbl1_1, #tbl2, tbl2_1,
 cilta %>% 
   arrange(pt_identifier, desc(any_infection)) %>% 
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  select(number_prior_lines_therapy,
+  select(os_from_infusion_months, age, agecat, male_sex, sex,
+         extramedullary_disease_yes_no, 
+         high_marrow_burden_50_percent, ecog_at_ld, 
+         r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
+         deletion_17p_prior_to_car_t_infusion_yes_no,
+         t_4_14_prior_to_car_t_infusion_yes_no,
+         t_14_16_prior_to_car_t_infusion_yes_no, gain_amp1q21,
+         bridging_therapy_yes_no,
+         number_prior_lines_therapy,
          number_of_prior_lines_of_therapy,
-         prior_auto_sct_yes_no,
-         # prior_treatment_with_any_gene_therapy_based_therapeutic_or_investigational_cellular_therapy_or_bcma_targeted_therapy_yes_no,
+         prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
          Prior_bcma_therapy,
+         immuno, proteasome, dara, doubleref, tripleref, pentaref,
+         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
          # `Received alkylating therapy with bridging (Yes=1, No=0)`,
          # `Days from last bridging to CAR-T infusion`,
          cell_dose_million_cells,
@@ -3254,6 +3815,7 @@ cilta %>%
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
          hlh, hlh_hlh_like_toxicities,
+         overall_hlh,
          steroid_use_yes_no, 
          tocilizumab_yes_no, anakinra_yes_no,
          bridging_therapy_yes_no, any_infection) %>% 
@@ -3269,10 +3831,21 @@ cilta %>%
 cilta %>% 
   arrange(pt_identifier, desc(any_infection), desc(any_sevinfection)) %>%
   distinct(pt_identifier, .keep_all = TRUE) %>% 
-  select(number_prior_lines_therapy,
+  select(os_from_infusion_months, age, agecat, male_sex, sex,
+         extramedullary_disease_yes_no, 
+         high_marrow_burden_50_percent, ecog_at_ld, 
+         r_iss_at_car_t_infusion, 
+         cytogenetics, cytogenetics_incl_1q,
+         deletion_17p_prior_to_car_t_infusion_yes_no,
+         t_4_14_prior_to_car_t_infusion_yes_no,
+         t_14_16_prior_to_car_t_infusion_yes_no, gain_amp1q21,
+         bridging_therapy_yes_no,
+         number_prior_lines_therapy,
          number_of_prior_lines_of_therapy,
-         prior_auto_sct_yes_no,
+         prior_auto_sct_yes_no, prior_allo_sct_within_6_months_before_apheresis,
          Prior_bcma_therapy,
+         immuno, proteasome, dara, doubleref, tripleref, pentaref,
+         did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
          # `Received alkylating therapy with bridging (Yes=1, No=0)`,
          # `Days from last bridging to CAR-T infusion`,
          cell_dose_million_cells,
@@ -3286,6 +3859,7 @@ cilta %>%
          other_delayed_non_parkinsonian_neurologic_toxicity_yes_no,
          delayed_neuro_type,
          hlh, hlh_hlh_like_toxicities,
+         overall_hlh,
          steroid_use_yes_no, 
          tocilizumab_yes_no, anakinra_yes_no,
          bridging_therapy_yes_no, any_sevinfection) %>% 
@@ -3315,10 +3889,10 @@ cilta %>%
          # `Eos day +90`, `Monos day +90`,
          # `CD3 day +90`, `CD56 day +90`, 
          cd4_day_90, cd8_day_90,
-         cd19_day_90,
+         cd19_day_90, ht_score,
          any_infection) %>% 
   tbl_summary(by = any_infection,
-              type = list(everything() ~ "continuous"),
+              type = list(-ht_score ~ "continuous"),
               statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1) %>% 
   add_p() %>%  bold_labels() %>% add_stat_label() %>% 
@@ -3340,10 +3914,10 @@ cilta %>%
          # `Eos day +90`, `Monos day +90`,
          # `CD3 day +90`, `CD56 day +90`, 
          cd4_day_90, cd8_day_90,
-         cd19_day_90,
+         cd19_day_90, ht_score,
          any_sevinfection) %>% 
   tbl_summary(by = any_sevinfection,
-              type = list(everything() ~ "continuous"),
+              type = list(-ht_score ~ "continuous"),
               statistic=list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1) %>% 
   add_p() %>%  bold_labels() %>% add_stat_label() %>% 
@@ -3417,7 +3991,30 @@ fig_dat %>%
   ) %>% 
   arrange(pfs_from_infusion_days) %>% 
   select(phrase, `cause of death` = cause_of_death_myeloma_toxicitiy_unrelated,
-         `CRS grade` = max_crs_grade_0_5, `delayed neurotoxicity` = delayed_neuro_type)
+         `CRS grade` = max_crs_grade_0_5, max_icans, delayed_neuro, `delayed neurotoxicity` = delayed_neuro_type, parkinsonian_neurotoxicity_yes_no, what_non_parkinsonian_neurotoxicity, infection_type_bacterial_viral_fungal_parasitic,  `infection details` = infection_type_details)
+
+a <- fig_dat %>% 
+  mutate(pfs_from_infusion_days = 
+           interval(
+             start = date_of_car_t_infusion, 
+             end = pfs_date)/
+           duration(n=1, units = "days")) %>% 
+  filter(os_event == 1 | pfs_event == 1) %>% 
+  mutate(event_at = case_when(
+    !is.na(date_of_pd) & pfs_from_infusion_months < 1        ~ "had pd",
+    !is.na(date_of_pd) & pfs_from_infusion_months < 3        ~ "had pd",
+    !is.na(date_of_pd) & pfs_from_infusion_months < 6        ~ "had pd",
+    !is.na(date_of_pd) & pfs_from_infusion_months < 12       ~ "had pd",
+    os_event == 1 & pfs_from_infusion_months < 1        ~ "died",
+    os_event == 1 & pfs_from_infusion_months < 3        ~ "died",
+    os_event == 1 & pfs_from_infusion_months < 6        ~ "died",
+    os_event == 1 & pfs_from_infusion_months < 12       ~ "died",
+  )) %>% 
+  filter(event_at == "died") %>% 
+  arrange(pfs_from_infusion_days) %>% 
+  select(pt_identifier, event_at, pfs_from_infusion_days, `cause of death` = cause_of_death_myeloma_toxicitiy_unrelated,
+         `CRS grade` = max_crs_grade_0_5, max_icans, delayed_neuro, `delayed neurotoxicity` = delayed_neuro_type, parkinsonian_neurotoxicity_yes_no, what_non_parkinsonian_neurotoxicity, infection_type_bacterial_viral_fungal_parasitic,  `infection details` = infection_type_details)
+write_csv(a, paste0(here::here(), "/cilta_cel/cause of death cilta-cel data.csv"))
 ```
 
  
@@ -4538,8 +5135,8 @@ cilta %>%
   # geom_point(aes(color = `Infection severity`), position = "jitter")
   labs(x = NULL, y = "Infection onset time (days)")+
   scale_color_manual(values = c("black", "red"))+
-  scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
-  coord_flip()
+  scale_y_continuous(expand = c(0, 5), limits = c(0, 400))#+
+  # coord_flip()
 
 cilta %>%
   mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>%
@@ -4578,7 +5175,11 @@ cilta %>%
   labs(x = NULL, y = "Infection onset time (days)")+
   scale_color_manual(values = c("black", "red"))+
   scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
-  coord_flip()
+  # coord_flip()
+  theme(axis.text.x = element_text(angle = 45, 
+                                   hjust = 1#,
+                                   # vjust = 0.5
+                                   ))
 ```
 
 
@@ -4820,7 +5421,7 @@ draw(ht_list, heatmap_legend_side = "bottom")
 
 
 ## Table S7 and Figure S2. MVA and forest plot
-Limit to evaluable patients at day 90
+Limit to evaluable patients at day 90 (For Grade 3+ Cytopenia at days 90 MVA)
 ```{r MVA and forest plot}
 mva_dat <- fig_dat %>% 
   filter(os_from_infusion_months > 3) %>% 
@@ -4832,12 +5433,69 @@ mva_dat <- fig_dat %>%
     gr3_cytopenia_90d == "No"    ~ 0,
     gr3_cytopenia_90d == "Yes"   ~ 1
   )) %>% 
+  mutate(any_late_icaht = case_when(
+    any_late_icaht == "No"    ~ 0,
+    any_late_icaht == "Yes"   ~ 1
+  )) %>% 
   mutate(CRS_grade2 = case_when(
     max_crs_grade_0_5 < 2                              ~ "No CRS or Grade < 2",
     max_crs_grade_0_5 >= 2                             ~ "Grade ≥2"),
     CRS_grade2 = factor(CRS_grade2, levels = c("No CRS or Grade < 2", "Grade ≥2"))
   )
 
+
+glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + ht_score + 
+      number_of_prior_lines_of_therapy,
+    data = mva_dat,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
+  bold_p(t = .05)
+glm(gr3_cytopenia_90d ~ high_marrow_burden_50_percent + ht_score,
+    data = mva_dat,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Grade 3+ Cytopenia at days 90**") %>%
+  bold_p(t = .05)
+
+
+```
+
+```{r}
+mva_dat_icaht <- fig_dat %>% 
+  mutate(any_late_icaht = case_when(
+    any_late_icaht == "No"    ~ 0,
+    any_late_icaht == "Yes"   ~ 1
+  ))
+
+
+glm(any_late_icaht ~ high_marrow_burden_50_percent + ht_score + 
+      number_of_prior_lines_of_therapy,
+    data = mva_dat_icaht,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Any late ICAHT**") %>%
+  bold_p(t = .05)
+glm(any_late_icaht ~ high_marrow_burden_50_percent + ht_score,
+    data = mva_dat_icaht,
+    family = "binomial") %>%
+  tbl_regression(exponentiate = TRUE, 
+                 intercept = TRUE) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**Any late ICAHT**") %>%
+  bold_p(t = .05)
+
+```
+
+
+older MVA
+```{r}
 # glm(gr3_cytopenia_30d ~ high_marrow_burden_50_percent + `gr3_cytopenia_-5d` + CRS_grade2 + steroid_use_yes_no + number_of_prior_lines_of_therapy,
 #     data = mva_dat,
 #     family = "binomial") %>%
@@ -4992,31 +5650,31 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level")
 
-ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ gr3_cytopenia_90d, 
-                   data=surv_dat),
-           title = "OS Analysis",
-           font.main = c(20, "bold", "black"),
-           font.x = c(18, "bold", "black"),
-           font.y = c(18, "bold", "black"),
-           font.legend = c(16, "black"),
-           font.tickslab = c(16, "bold", "black"),
-           size = 1.5,
-
-           xlab = "Time in months",
-           legend = "top",
-           legend.title = "",
-           pval = TRUE,
-           conf.int = FALSE,
-           # Censor
-           censor = TRUE
-) + guides(colour = guide_legend(ncol = 1))
-
-coxph(Surv(time = surv_dat$os_from_infusion_months, 
-                   event = surv_dat$os_event) ~ gr3_cytopenia_90d, 
-              data = surv_dat)  %>% 
-  tbl_regression(exponentiate = TRUE) %>% 
-  bold_p(t = .05) %>% 
-  add_nevent(location = "level") %>% add_n(location = "level")
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ gr3_cytopenia_90d, 
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+# 
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+# 
+# coxph(Surv(time = surv_dat$os_from_infusion_months, 
+#                    event = surv_dat$os_event) ~ gr3_cytopenia_90d, 
+#               data = surv_dat)  %>% 
+#   tbl_regression(exponentiate = TRUE) %>% 
+#   bold_p(t = .05) %>% 
+#   add_nevent(location = "level") %>% add_n(location = "level")
 ```
 
 
@@ -5048,9 +5706,38 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level")
 
-ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ ORR_as_best_response, 
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ ORR_as_best_response, 
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+# 
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+# 
+# coxph(Surv(time = surv_dat$os_from_infusion_months, 
+#                    event = surv_dat$os_event) ~ ORR_as_best_response, 
+#               data = surv_dat)  %>% 
+#   tbl_regression(exponentiate = TRUE) %>% 
+#   bold_p(t = .05) %>% 
+#   add_nevent(location = "level") %>% add_n(location = "level")
+```
+
+## Survival analysis - KM by gr3 cytopenia at day 30
+```{r Survival analysis - KM by gr3_cytopenia_30d}
+ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ gr3_cytopenia_30d, 
                    data=surv_dat),
-           title = "OS Analysis",
+           title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
            font.x = c(18, "bold", "black"),
            font.y = c(18, "bold", "black"),
@@ -5067,33 +5754,224 @@ ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ ORR_as_best_respons
            censor = TRUE
 ) + guides(colour = guide_legend(ncol = 1))
 
-coxph(Surv(time = surv_dat$os_from_infusion_months, 
-                   event = surv_dat$os_event) ~ ORR_as_best_response, 
+coxph(Surv(time = surv_dat$pfs_from_infusion_months, 
+                   event = surv_dat$pfs_event) ~ gr3_cytopenia_30d, 
               data = surv_dat)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level")
+
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ gr3_cytopenia_30d, 
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+# 
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+# 
+# coxph(Surv(time = surv_dat$os_from_infusion_months, 
+#                    event = surv_dat$os_event) ~ gr3_cytopenia_30d, 
+#               data = surv_dat)  %>% 
+#   tbl_regression(exponentiate = TRUE) %>% 
+#   bold_p(t = .05) %>% 
+#   add_nevent(location = "level") %>% add_n(location = "level")
 ```
 
-## UVA best ORR by gr3 cytopenia at day 90
-I was unable to perform the analyses investigating severe cytopenias at D90 and best response because everyone with severe cytopenias had an event.
-```{r glm}
-mva_dat <- surv_dat %>% 
-  # filter(os_from_infusion_months > 3) %>% 
-  mutate(ORR_as_best_response = case_when(
-    ORR_as_best_response == "ORR"         ~ 1,
-    ORR_as_best_response == "never ORR"   ~ 0
-  )) 
+## Survival analysis - KM by CAR-HEMATOTOX score
+```{r Survival analysis - KM by ht_score}
+ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ ht_score, 
+                   data=surv_dat),
+           title = "PFS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(18, "bold", "black"),
+           font.y = c(18, "bold", "black"),
+           font.legend = c(16, "black"),
+           font.tickslab = c(16, "bold", "black"),
+           size = 1.5,
 
-# glm(ORR_as_best_response ~ gr3_cytopenia_90d,
-#     data = mva_dat,
-#     family = "binomial") %>%
-#   tbl_regression(exponentiate = TRUE, 
-#                  intercept = TRUE) %>%
-#   add_nevent(location = "level") %>% add_n(location = "level") %>%
-#   modify_spanning_header(everything() ~ "**ORR_as_best_response**") %>%
-#   bold_p(t = .05) 
+           xlab = "Time in months",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) + guides(colour = guide_legend(ncol = 1))
+
+coxph(Surv(time = surv_dat$pfs_from_infusion_months, 
+                   event = surv_dat$pfs_event) ~ ht_score, 
+              data = surv_dat)  %>% 
+  tbl_regression(exponentiate = TRUE) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ ht_score, 
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+# 
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+# 
+# coxph(Surv(time = surv_dat$os_from_infusion_months, 
+#                    event = surv_dat$os_event) ~ ht_score, 
+#               data = surv_dat)  %>% 
+#   tbl_regression(exponentiate = TRUE) %>% 
+#   bold_p(t = .05) %>% 
+#   add_nevent(location = "level") %>% add_n(location = "level")
 ```
+
+## Survival analysis - KM by ANY early ICAHT
+```{r Survival analysis - KM by gr3_early_icaht}
+ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_early_icaht,
+                   data=surv_dat),
+           title = "PFS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(18, "bold", "black"),
+           font.y = c(18, "bold", "black"),
+           font.legend = c(16, "black"),
+           font.tickslab = c(16, "bold", "black"),
+           size = 1.5,
+
+           xlab = "Time in months",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) + guides(colour = guide_legend(ncol = 1))
+
+coxph(Surv(time = surv_dat$pfs_from_infusion_months,
+                   event = surv_dat$pfs_event) ~ any_early_icaht,
+              data = surv_dat)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ gr3_early_icaht,
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+#
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+#
+# coxph(Surv(time = surv_dat$os_from_infusion_months,
+#                    event = surv_dat$os_event) ~ gr3_early_icaht,
+#               data = surv_dat)  %>%
+#   tbl_regression(exponentiate = TRUE) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level")
+```
+
+## Survival analysis - KM by ANY late ICAHT
+```{r Survival analysis - KM by gr3_late_icaht}
+ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_late_icaht,
+                   data=surv_dat),
+           title = "PFS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(18, "bold", "black"),
+           font.y = c(18, "bold", "black"),
+           font.legend = c(16, "black"),
+           font.tickslab = c(16, "bold", "black"),
+           size = 1.5,
+
+           xlab = "Time in months",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE
+) + guides(colour = guide_legend(ncol = 1))
+
+coxph(Surv(time = surv_dat$pfs_from_infusion_months,
+                   event = surv_dat$pfs_event) ~ any_late_icaht,
+              data = surv_dat)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level")
+
+# ggsurvplot(survfit(Surv(os_from_infusion_months, os_event) ~ gr3_late_icaht,
+#                    data=surv_dat),
+#            title = "OS Analysis",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(18, "bold", "black"),
+#            font.y = c(18, "bold", "black"),
+#            font.legend = c(16, "black"),
+#            font.tickslab = c(16, "bold", "black"),
+#            size = 1.5,
+#
+#            xlab = "Time in months",
+#            legend = "top",
+#            legend.title = "",
+#            pval = TRUE,
+#            conf.int = FALSE,
+#            # Censor
+#            censor = TRUE
+# ) + guides(colour = guide_legend(ncol = 1))
+#
+# coxph(Surv(time = surv_dat$os_from_infusion_months,
+#                    event = surv_dat$os_event) ~ gr3_late_icaht,
+#               data = surv_dat)  %>%
+#   tbl_regression(exponentiate = TRUE) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level")
+```
+
+<!-- ## UVA best ORR by gr3 cytopenia at day 90 -->
+<!-- I was unable to perform the analyses investigating severe cytopenias at D90 and best response because everyone with severe cytopenias had an event. -->
+<!-- ```{r glm} -->
+<!-- mva_dat <- surv_dat %>%  -->
+<!--   # filter(os_from_infusion_months > 3) %>%  -->
+<!--   mutate(ORR_as_best_response = case_when( -->
+<!--     ORR_as_best_response == "ORR"         ~ 1, -->
+<!--     ORR_as_best_response == "never ORR"   ~ 0 -->
+<!--   ))  -->
+
+<!-- # glm(ORR_as_best_response ~ gr3_cytopenia_90d, -->
+<!-- #     data = mva_dat, -->
+<!-- #     family = "binomial") %>% -->
+<!-- #   tbl_regression(exponentiate = TRUE,  -->
+<!-- #                  intercept = TRUE) %>% -->
+<!-- #   add_nevent(location = "level") %>% add_n(location = "level") %>% -->
+<!-- #   modify_spanning_header(everything() ~ "**ORR_as_best_response**") %>% -->
+<!-- #   bold_p(t = .05)  -->
+<!-- ``` -->
 
 
 
