@@ -2,7 +2,9 @@
 title: "Manuscript analyses"
 author: "Christelle Colin-Leitzinger"
 date: '`r Sys.Date()`'
-output: 
+output:
+  word_document:
+    toc: true
   html_document:
     toc: true
     toc_float: true
@@ -10,7 +12,7 @@ output:
     theme: united
     highlight: pygments
     df_print: paged
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -55,22 +57,22 @@ theme_gtsummary_compact()
 # path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Cytopenias")
 
 Characteristics <-
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "CHARACTERISTICS AND OUTCOMES ", skip = 1)
 Counts <-
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "COUNTS")
 Infections <-
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "INFECTIONS")
 Support <-
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "SUPPORT")
 Pneumo_titers <-
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "BACTERIAL AND VIRAL TITERS")
 Apheresis <- 
-  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023.xlsx"),
+  readxl::read_xlsx(paste0(here(), "/cilta_cel/Carvykti cellularity_11202023_modifiedCCL_04032024.xlsx"),
                     sheet = "APHERESIS")
 id_to_modify_neurotox <- 
   read_csv(
