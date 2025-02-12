@@ -2359,6 +2359,25 @@ cilta %>%
   bold_labels() %>% add_stat_label()
 ```
 
+```{r death}
+cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  mutate(os_event = case_when(
+    os_event == 1          ~ "Died",
+    os_event == 0          ~ "Alive"
+  )) %>% 
+  select(os_event) %>% 
+  tbl_summary() %>% 
+  bold_labels() %>% add_stat_label()
+
+cilta %>% 
+  distinct(pt_identifier, .keep_all = TRUE) %>% 
+  filter(os_event == 1) %>% 
+  select(`cause of death` = cause_of_death_myeloma_toxicitiy_unrelated) %>% 
+  tbl_summary() %>% 
+  bold_labels() %>% add_stat_label()
+```
+
 
 ## Table 1. Patient baseline characteristics
 ```{r Table 1}
@@ -2561,7 +2580,7 @@ cilta %>%
   bold_labels() %>% add_stat_label()
 ```
  
-## Table 3 A-B. Cytopenias following ide-cel
+## Table 3 A-B. Cytopenias following cilta-cel
 Evaluable patients (who survived and did not progressed) are included for each time points.
 ```{r Table 3}
 tbl1 <- cilta %>% 
@@ -3582,7 +3601,34 @@ tbl7 <- cilta %>%
 tbl_stack(list(tbl1, tbl2, tbl3, tbl5, tbl7))
 ```
 
-## Table S8. Details of infections after ide-cel
+## Table S2. severe infection
+```{r}
+cilta %>% 
+  filter(time_from_infusion_to_infection_days <= 30) %>% 
+  select(any_sevinfection) %>% 
+  tbl_summary() %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_spanning_header(all_stat_cols() ~ "**Severe infections in the first 30 days**")
+
+cilta %>% 
+  filter(time_from_infusion_to_infection_days > 30 &
+           time_from_infusion_to_infection_days <= 100) %>% 
+  select(any_sevinfection) %>% 
+  tbl_summary() %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_spanning_header(all_stat_cols() ~ "**Severe infections day 31 – 100**")
+
+cilta %>% 
+  filter(time_from_infusion_to_infection_days > 100) %>% 
+  select(any_sevinfection) %>% 
+  tbl_summary() %>% 
+  bold_labels() %>% add_stat_label() %>%
+  modify_spanning_header(all_stat_cols() ~ "**Severe infections after day 100**")
+
+```
+
+
+## Table S8. Details of infections after cilta-cel
 Patients can be counted multiple times if multiple infections.
 ```{r infection details 30 first days}
 tbl1 <- cilta %>% 
@@ -4025,7 +4071,7 @@ write_csv(a, paste0(here::here(), "/cilta_cel/cause of death cilta-cel data.csv"
 ## Figure S1. Inflammatory markers after cilta-cel
 
 
-```{r Figure 2. Inflammatory markers after ide-cel, fig.height=12}
+```{r Figure 2. Inflammatory markers after cilta-cel, fig.height=12}
 LDH <- fig_dat %>% 
   select(pt_identifier, starts_with("ldh_")) %>% 
   pivot_longer(cols = -c(pt_identifier)) %>% 
@@ -5236,7 +5282,7 @@ a /
 
 ## Figure S3. Viral titers after cilta-cel
 Focus on MCC patients / I didn't use day 180 as they are less values but I can add it if you want.
-```{r Figure S1. Viral titers after ide-cel}
+```{r Figure S1. Viral titers after cilta-cel}
 fig_dat <- cilta %>% 
   distinct(pt_identifier, .keep_all = TRUE)
 moffitt_subset <- fig_dat %>% filter(site == "Moffitt")
@@ -5444,7 +5490,7 @@ If antibody concentration ≤1.0 consider negative (not immune)
 ```
 
 
-```{r Figure S2. Pneumococcal titers after ide-cel, fig.width=15, fig.height=12}
+```{r Figure S2. Pneumococcal titers after cilta-cel, fig.width=15, fig.height=12}
 library(ComplexHeatmap)
 mat <- moffitt_subset %>% 
   select(pt_identifier, 
