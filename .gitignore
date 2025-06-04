@@ -13,6 +13,7 @@
 *.tiff
 *.html
 *.jpg
+*.jpeg
 *.csv
 *.xlsx
 *.pdf
@@ -23,3 +24,12 @@
 # Example code in progress
 *-Ex.R
 *-Ex.Rmd
+
+# Other folder
+/ALC_cilta
+/cilta_cel
+/RWE
+
+
+
+
