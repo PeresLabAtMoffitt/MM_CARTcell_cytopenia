@@ -1,0 +1,1452 @@
+---
+title: "Teclistamab analyses"
+author: "Christelle Colin-Leitzinger"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: false
+    theme: united
+    highlight: pygments
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+
+<style type= "text/css">
+
+. figure {
+   margin-top: 25px;
+   margin-bottom: 100px;
+}
+
+table {
+    margin-top: 10px;
+    margin-bottom: 25px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      cache = FALSE,
+                      fig.align='center'
+                      )
+```
+
+```{r library}
+library(here)
+library(tidyverse)
+library(ggplot2)
+library(gtsummary)
+library(labelled)
+library(DescTools)
+library(patchwork)
+library(ggbreak)
+library(survival)
+library(survminer)
+theme_set(theme_classic())
+theme_gtsummary_compact()
+```
+
+```{r load}
+# path <- fs::path("","Volumes","Peres_Research", "Myeloma", "Analyses", "Janssen Teclistamab")
+
+data <- 
+  read_csv(locale = locale(encoding="latin1"),
+    paste0(#path, 
+           here(), 
+           "/Tec_05222025.csv")#,
+    # na = "N/A"
+    ) %>% 
+  janitor::clean_names()
+```
+
+```{r column name}
+data <- data %>% 
+  `colnames<-`(paste0(colnames(.), "~", .[1,])) %>% 
+  `colnames<-`(str_remove(colnames(.), "~NA")) %>% 
+  janitor::clean_names() %>% 
+  rename(pt_identifier = patient_identifier_use_same_id_for_cns_amyloid_sheets_if_appropriate,
+         if_ineligible_for_bs_ab_trial_why_not_be_specific_and_can_separate_reasons_with_commas = 
+           if_ineligible_for_bs_ab_trial_why_not_be_specific_and_can_separate_reasons_with_commas_no_0_y_1, 
+         date_of_infection_1st = date_of_infection_74,
+         infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics = infection_severity_73_severe_hospitalization_or_requiring_iv_antibiotics,
+         date_of_infection_2nd = date_of_infection_77,
+         infection_severity_2nd_severe_hospitalization_or_requiring_iv_antibiotics = infection_severity_76_severe_hospitalization_or_requiring_iv_antibiotics,
+         date_of_infection_3rd = date_of_infection_80,
+         infection_severity_3rd_severe_hospitalization_or_requiring_iv_antibiotics = infection_severity_79_severe_hospitalization_or_requiring_iv_antibiotics,
+         date_of_infection_4th = date_of_infection_83,
+         infection_severity_4th_severe_hospitalization_or_requiring_iv_antibiotics = infection_severity_82_severe_hospitalization_or_requiring_iv_antibiotics
+         ) %>% 
+  slice(-1)
+
+data1 <- type.convert(data, as.is = TRUE)
+```
+
+# Data
+
+What we did:
+
+- The start date to calculate survival and days of onset is date_of_bs_ab_step_up_d1.   
+- There was text into the variable date_of_first_bs_ab_full_dose. The text was transferred into reason_no_date_of_first_bs_ab_full_dose.  
+  Patient with text have progressed.   
+- max_crp has a date, now it is NA.   
+- date_of_max_crs has 0/1.   
+- Difference between prior_cart_0_no_1_yes and Prior CART (yes/no)? The later has 0/1 values so I am using prior_cart_0_no_1_yes.   
+- baseline_crp_prior_to_bs_ab_initiation_mg_l has a "4.4." value. It was replaced by "4.4".   
+- ALC Day 15 has a value of “-85“ and was replaced by 85.   
+- in_out_patient was coded "In" for patient with hospital length stay values and "Out" when no values.   
+
+
+
+Issues in data with no impact for now:   
+
+- Wrong date of Discontinuation "1/0/1900" or should be NA as the value in Discontinuation (yes/no) is "No". If the date is wrong, then Discontinuation (yes/no) should be "Yes".    
+- Wrong date of MM diagnosis "10/1/20218".   
+- For treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays,
+should I combine "CRS and Infection" and "Infection and CRS"? others? or is there an time order to consider?   
+- date_of_max_ferritin has a date "20-Sep".   
+- date of max crp.   
+- Prior BsAb  (yes/no) has a “0” value.   
+- difference between prior_bcma_directed_therapy_no_0_y_1 and prior_bcma_directed_therapy_yes_no. Looks none others that the yes/no is not recoded well so I am using 0/1 that I recoded myself.   
+- #Infection_1 (Bacterial, Viral fungal) has numbers instead of “Bacterial”, “Viral” etc .     
+
+
+```{r temp_fix}
+temp_fix <- data1 %>% 
+  mutate(baseline_crp_prior_to_bs_ab_initiation_mg_l = case_when(
+    baseline_crp_prior_to_bs_ab_initiation_mg_l == "4.4."        ~ 4.4,
+    TRUE                  ~ as.numeric(baseline_crp_prior_to_bs_ab_initiation_mg_l)
+  )) %>% 
+  mutate(alc_day_15 = case_when(
+    alc_day_15 == "85-"   ~ 85,
+    TRUE                  ~ as.numeric(alc_day_15)
+  )) %>% 
+  mutate_at(c(   ############################### Remove when fix temp un necessary
+              "max_crp"
+  ), ~ as.numeric(.)
+  )
+```
+
+
+```{r data cleaning}
+data1 <- temp_fix %>% 
+  # General----
+  # Fix letter case and missing
+  # mutate(across(where(is.character), ~ str_replace(., "NE|ND|N/A|Not done", NA_character_))) %>%
+  mutate(across(c(where(is.character),
+                  -c("pt_identifier",
+                     "myeloma_involved_heavy_chain_ig_g_ig_a_ig_m_ig_d_ig_e_or_blank",
+                     "best_documented_emd_response"
+                     )),
+                ~ str_to_sentence(.) )) %>%
+  mutate(across(c(contains("vgpr"), #"response_to_bridging_chemotherapy"
+                  ),
+                ~ str_to_upper(.) )) %>%
+  # Recode 0/1
+  mutate_at(c("bs_ab_served_only_as_pre_car_t_bridging_0_no_1_yes",
+              "pfs_with_1st_line_mm_diagnosis_18_months_0_no_1_yes",
+              "oligo_or_non_secretory_at_bs_ab_initiation_0_no_1_yes", 
+              "deletion_17p_prior_to_bs_ab_0_no_1_yes",
+              "t_4_14_prior_to_bs_ab_0_no_1_yes",
+              "t_14_16_prior_to_bs_ab_0_no_1_yes",
+              "gain_amp1q21_prior_to_bs_ab_0_no_1_yes",
+              "amp_1_q_only_0_no_1_yes",
+              "deletion_1p_0_no_1_yes",
+              "prior_auto_sct_no_0_yes_1",
+              "prior_cart_0_no_1_yes",
+              "amyloidosis_if_yes_fill_out_amyloid_sheet_as_well_please_once_youre_done_with_this_one_0_no_1_yes",
+              "active_cns_mm_if_yes_fill_out_cns_sheet_as_well_once_done_with_this_one_0_no_1_yes",
+              "active_pcl_5_percent_cp_cs_within_30_days_prior_or_after_bs_ab_initiation_0_no_1_yes",
+              "prior_bcma_directed_therapy_no_0_y_1",
+              "triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1",
+              "penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1",
+              "eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1",
+              "high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1",
+              "prophylactic_tocilizumab_n_0_y_1",
+              "recurrent_crs_n_0_y_1",
+              "tocilizumab_as_tx_n_0_y_1",
+              "steroid_use_as_tx_n_0_y_1",
+              "anakinra_n_0_y_1",
+              "infection_n_0_y_1",
+              "icu_admission_during_first_cycle_n_0_y_1",
+              "need_for_gcsf", "need_for_tpo_agonist",
+              "ivig_use_yes_1_no_0", 
+              "hemodialysis_pre_bs_ab_y_1_n_0",
+              "hemodialysis_post_bs_ab_y_1_n_0",
+              "modification_in_schedule_to_monthly_0_no_1_yes"
+  ), 
+  ~ case_when(
+    . == 1                                              ~ "Yes",
+    . == 0                                              ~ "No",
+    TRUE                                                ~ as.character(.)
+  )) %>% 
+  # Recode 1/2
+  mutate_at(c("any_invasive_second_primary_malignancy_exclude_non_melanoma_skin_cancer_dcis_etc_1_yes_2_no"
+  ), 
+  ~ case_when(
+    . == 1                                              ~ "Yes",
+    . == 2                                              ~ "No",
+    TRUE                                                ~ NA_character_
+  )) %>% 
+  # Exposed, refractory
+  mutate_at(c("bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2"
+  ), 
+  ~ case_when(
+    . == 0                                              ~ "Exposed",
+    . == 1                                              ~ "Refractory",
+    . == 2                                              ~ "Naive",
+    TRUE                                                ~ NA_character_
+  )) %>% 
+  # mutate_at(c("baseline_crp_prior_to_bs_ab_initiation_mg_l"#,   ############################### Remove when fix temp un necessary
+  #             # "max_crp"
+  # ), ~ as.numeric(.)
+  # ) %>%
+  mutate_at(c("ecog_ps_at_bs_ab_initiation_0_5"#,
+              # "max_crs_grade_0_5",
+              # "max_icans_grade_grade"
+  ), ~ factor(.)
+  ) %>%
+  mutate(reason_no_date_of_first_bs_ab_full_dose = case_when(
+    date_of_first_bs_ab_full_dose %in% 
+      c("Cmo before receiving full dose",
+        "Withdrew care after d5")              ~ date_of_first_bs_ab_full_dose
+  ), .after = date_of_first_bs_ab_full_dose) %>% 
+  # mutate(was_discontinued = case_when(
+  #   date_of_disocntinuation_if_cotinues_enter_0 == 0     ~ "Continued",
+  #   !is.na(date_of_disocntinuation_if_cotinues_enter_0)  ~ "Discontinued"
+  # ), .after = ) %>%
+  mutate(across(c("date_of_mm_diagnosis",
+                  "date_of_bs_ab_step_up_d1",
+                  "date_of_first_bs_ab_full_dose",
+                  "date_of_max_ferritin",
+                  "date_of_max_crp",
+                  "date_of_onset_of_crs",
+                  "date_of_max_crs",
+                  "date_of_onset_of_icans",
+                  "date_of_max_ican",
+                  "date_of_infection_1st",
+                  "date_of_infection_2nd",
+                  "date_of_infection_3rd",
+                  "date_of_infection_4th",
+                  "anc_nadir_date", "hgb_nadir_date",
+                  "plt_nadir_date", "date_of_ig_g_nadir",
+                  "date_of_first_ivig_dose_following_bs_ab_administration",
+                  "date_of_best_mrd_response_relative_to_bs_ab_start",
+                  "date_of_pd",
+                  "date_of_disocntinuation_if_cotinues_enter_0",
+                  "date_of_death", "date_of_last_contact",
+                  "date_of_first_exposure_to_prior_bcma_agent",
+                  "date_of_last_exposure_to_prior_bcma_agent",
+                  "date_last_exposure",
+                  "while_on_bs_ab_date_of_first_documented_emd_response",
+                  "date_of_best_documented_emd_response",
+                  "date_of_last_imaging_before_data_cutoff_only_in_pts_who_are_still_responding"),
+                ~ as.Date(., 
+                          tryFormats = c("%m/%d/%y", "%m/%d/%Y"), 
+                          origin = "1899-12-30"))) %>% 
+  # Treatment
+  mutate(bs_ab_name_tec_1_tal_2_elra_3 = case_when(
+    bs_ab_name_tec_1_tal_2_elra_3 == 1        ~ "Teclistamab",
+    bs_ab_name_tec_1_tal_2_elra_3 == 2        ~ "tal",
+    bs_ab_name_tec_1_tal_2_elra_3 == 3        ~ "elra",
+    TRUE                                      ~ as.character(bs_ab_name_tec_1_tal_2_elra_3)
+  )) %>% 
+  mutate(sex_0_male_1_female = case_when(
+    sex_0_male_1_female == 0                  ~ "Male",
+    sex_0_male_1_female == 1                  ~ "Female",
+    TRUE                                      ~ as.character(sex_0_male_1_female)
+  )) %>% 
+  mutate(race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 = case_when(
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 0        ~ "White",
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 1        ~ "Black",
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 2        ~ "Asian American and Pacific Islander",
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 3        ~ "American_indian",
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 4        ~ "Other",
+    race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 == 5        ~ "Unknown",
+    TRUE                                      ~ as.character(race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5)
+  )) %>% 
+  mutate(hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown = case_when(
+    hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown == 0        ~ "No/Unknown",
+    hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown == 1        ~ "Hispanic, latinX, spanish origin",
+    TRUE                                      ~ as.character(hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown)
+  )) %>% 
+
+  
+  mutate(myeloma_involved_light_chain_kappa_lambda_biclonal_blank = case_when(
+    myeloma_involved_light_chain_kappa_lambda_biclonal_blank == "K"        ~ "Kappa",
+    TRUE                                      ~ as.character(myeloma_involved_light_chain_kappa_lambda_biclonal_blank)
+  )) %>% 
+  
+  
+  mutate(pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx = case_when(
+    pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx == 0        ~ "No",
+    pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx == 1        ~ "Secondary PCL (not at Dx)",
+    pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx == 2        ~ "Primary PCL (at Dx)",
+    TRUE                                      ~ as.character(pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx)
+  )) %>% 
+  
+  
+  mutate(number_infection_1_bacterial_viral_fungal) %>%
+  
+  
+  mutate(infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics = case_when(
+    infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics == "N/a"        ~ NA_character_,
+    TRUE       ~ infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics
+  )) %>%
+  mutate(in_out_patient = case_when(
+    is.na(if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions)
+    ~ "Out",
+    !is.na(if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions)
+    ~ "In"
+  ), .after = if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions) %>% 
+  mutate(days_of_icu_admission = case_when(
+    days_of_icu_admission == 0             ~ NA_real_,
+    TRUE                                   ~ days_of_icu_admission
+  )) %>% 
+  
+  mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = str_replace(
+    treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, 
+    "1", "Infection")) %>% 
+  mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = str_replace(
+    treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, 
+    "2", "Cytopenias")) %>% 
+  mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = str_replace(
+    treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, 
+    "3", "CRS")) %>% 
+  mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = str_replace(
+    treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, 
+    "4", "ICANS")) %>% 
+  mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = str_replace(
+    treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, 
+    "5", "Other")) %>% 
+  # mutate(treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays = case_when(
+    # treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays == 1        ~ "Infection",
+    # treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays == 2        ~ "Cytopenias",
+    # treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays == 3        ~ "CRS",
+    # treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays == 4        ~ "ICANS",
+    # treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays == 5        ~ "Other",
+  #   TRUE                                      ~ treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays
+  # )) %>% 
+  
+  
+  
+  mutate(reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain = case_when(
+    reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 1        ~ "PD",
+    reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 2        ~ "Toxicity",
+    reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 3        ~ "Ongoing response",
+    reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 4        ~ "Death",
+    reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 5        ~ "Other",
+    TRUE                                      ~ reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain
+  )) %>% 
+  
+  
+  
+  mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = case_when(
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 1        ~ "PD",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 2        ~ "infection_while_of_bs_ab",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 3        ~ "CRS",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 4        ~ "ICANS",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 5        ~ "Others",
+    TRUE                                      ~ as.character(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
+  )) %>% 
+  
+  
+  
+  mutate(type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 = case_when(
+    type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 1        ~ "ADC",
+    type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 2        ~ "CART",
+    type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 3        ~ "BsAb",
+    TRUE                                      ~ as.character(type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3)
+  )) %>% 
+  
+  mutate(response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 = case_when(
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 1        ~ "CR",
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 2        ~ "VGPR",
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 3        ~ "PR",
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 4        ~ "SD",
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 5        ~ "PD",
+    response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 == 6        ~ "NE",
+    TRUE                                      ~ as.character(response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6)
+  )) %>% 
+  
+  
+  mutate(just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal = case_when(
+    just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal == 0        ~ "None",
+    just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal == 1        ~ "Paraskeletal only",
+    just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal == 2        ~ "True EMD (+/-paraskeletal)",
+    TRUE                                      ~ as.character(just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal)
+  )) %>% 
+  
+  
+  
+  mutate(total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 = case_when(
+    total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 == 1        ~ "1 site",
+    total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 == 2        ~ "2 sites",
+    total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 == 3        ~ ">2 sites",
+    TRUE                                      ~ as.character(total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3)
+  )) %>% 
+  
+  
+  
+  mutate(xrt_2_weeks_before_and_after_3_months_of_bs_ab_starting_yes_no_response = case_when(
+    xrt_2_weeks_before_and_after_3_months_of_bs_ab_starting_yes_no_response == "N"         ~ "No",
+    TRUE                                      ~ xrt_2_weeks_before_and_after_3_months_of_bs_ab_starting_yes_no_response
+  )) %>%
+  mutate(true_emd_relapse_yes_no = case_when(
+    true_emd_relapse_yes_no == "Y"         ~ "Yes",
+    is.na(true_emd_relapse_yes_no)         ~ NA_character_,
+    TRUE                                   ~ as.character(true_emd_relapse_yes_no)
+  )) %>% 
+  
+  
+  
+  mutate(if_yes_what_location_0_same_site_1_new_site_2_both = case_when(
+    if_yes_what_location_0_same_site_1_new_site_2_both == 0        ~ "Same site",
+    if_yes_what_location_0_same_site_1_new_site_2_both == 1        ~ "New site",
+    if_yes_what_location_0_same_site_1_new_site_2_both == 2        ~ "Both",
+    TRUE                                      ~ as.character(if_yes_what_location_0_same_site_1_new_site_2_both)
+  ))
+  
+
+
+# Fix the "<" and ">" to take the min or max or each column including numbers next to the signs----
+# Also replace "Suboptimal" by NA
+vec_col <- c("ig_g_nadir_during_first_6_cycles_mg_d_l",
+             "baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l"
+             )
+class(data1) <- "data.frame"
+
+for (i in vec_col) {
+  
+  if (class(data1[, i]) == "character") {
+    
+    data1 <- data1 %>% 
+      mutate(wo_sign = as.numeric(str_remove(data1[, i], ">|<"))) %>% 
+      mutate(!!i := case_when(
+        str_detect(data1[, i], ">")                 ~ max(wo_sign, na.rm = TRUE),
+        str_detect(data1[, i], "<")                 ~ min(wo_sign, na.rm = TRUE),
+        TRUE                                         ~ as.numeric(wo_sign)
+      )) %>% 
+      select(-c(wo_sign))
+  }
+}
+
+```
+
+```{r}
+data2 <- data1 %>% 
+  # Age categories----
+  mutate(agecat = case_when(
+    age_at_bs_ab_initiation < 70                                         ~ "< 70 years",
+    age_at_bs_ab_initiation >= 70                                        ~ "≥ 70 years"
+  ),
+  agecat = factor(agecat, levels = c("< 70 years", "≥ 70 years")),
+  .after = age_at_bs_ab_initiation
+  ) %>% 
+  # Sex categories----
+  mutate(male_sex = case_when(
+    sex_0_male_1_female == "Male"                                    ~ 1,
+    sex_0_male_1_female == "Female"                                  ~ 0
+  ), .after = sex_0_male_1_female) %>% 
+  
+  # ECOG
+  mutate(ecog_ps_at_bs_ab_initiation_0_5 = case_when(
+    ecog_ps_at_bs_ab_initiation_0_5 == 0 |
+      ecog_ps_at_bs_ab_initiation_0_5 == 1                                ~ "0-1",
+    ecog_ps_at_bs_ab_initiation_0_5 %in% c(2:5)                           ~ "2-5"
+  )) %>%
+  # Cytogenetics ----
+  mutate(cytogenetics = case_when(
+    deletion_17p_prior_to_bs_ab_0_no_1_yes == "Yes" | 
+      t_4_14_prior_to_bs_ab_0_no_1_yes == "Yes" | 
+      t_14_16_prior_to_bs_ab_0_no_1_yes == "Yes"             ~ "Yes",
+    deletion_17p_prior_to_bs_ab_0_no_1_yes == "No" &
+      t_4_14_prior_to_bs_ab_0_no_1_yes == "No" &
+      t_14_16_prior_to_bs_ab_0_no_1_yes == "No"               ~ "No",
+    TRUE                                                           ~ NA_character_
+  ), .before = deletion_17p_prior_to_bs_ab_0_no_1_yes) %>% 
+  # Refractory status ----
+  mutate(lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 = case_when(
+    str_detect(
+      lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2, "Ref")     ~ "Refractory",
+    TRUE           ~ lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2
+  )) %>% 
+  mutate(immuno = case_when(
+    lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" |
+      pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"           ~ "Yes",
+    TRUE                                                           ~ "No"
+  ), .after = pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2) %>% 
+  mutate(proteasome = case_when(
+    bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" |
+      carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"            ~ "Yes",
+    TRUE                                                           ~ "No"
+  ), .after = carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2) %>% 
+  mutate(dara = case_when(
+    daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"            ~ "Yes",
+    TRUE                                                           ~ "No"
+  ), .after = daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2) %>% 
+  mutate(doubleref = case_when(
+    proteasome == "Yes" &
+      immuno == "Yes"                                              ~ "Yes",
+    TRUE                                                           ~ "No"
+  ), .after = proteasome) %>% 
+  # mutate(triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1 = case_when(
+  #   proteasome == "Yes" &
+  #     immuno == "Yes" &
+  #     daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"          ~ "Yes",
+  #   TRUE                                                           ~ "No"
+  # )) %>% 
+  # mutate(penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1 = case_when(
+  #   bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
+  #     carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" &
+  #     lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
+  #     pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
+  #     daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"          ~ "Yes",
+  #   TRUE                                                           ~ "No"
+  # )) %>% 
+  mutate(number_of_prior_lines_of_therapy_before_bs_ab_cat = case_when(
+    number_of_prior_lines_of_therapy_before_bs_ab <= 4                        ~ "≤ 4",
+    number_of_prior_lines_of_therapy_before_bs_ab > 4                         ~ "> 4"
+  ))
+```
+
+```{r toxicities}
+cart2 <- data2 %>% 
+# CRS ----
+  mutate(CRS_any = ifelse(max_crs_grade_0_5 == 0, "No", "Yes"),
+       crs_any_coded_0_1 = ifelse(CRS_any == "No", 0, 1),
+       CRS_gradecat = case_when(
+         max_crs_grade_0_5 == 0                             ~ "No CRS",
+         max_crs_grade_0_5 == 1                             ~ "Grade 1 or 2",
+         max_crs_grade_0_5 == 2                             ~ "Grade 1 or 2",
+         max_crs_grade_0_5 >= 3                             ~ "Grade ≥3"),
+       CRS_gradecat = factor(CRS_gradecat, levels = c("No CRS", "Grade 1 or 2", "Grade ≥3")),
+       gr3_CRS = case_when(
+         max_crs_grade_0_5 %in% c(0:2)                      ~ "Grade <3",
+         max_crs_grade_0_5 %in% c(3:5)                      ~ "Grade ≥3",
+         TRUE                                                   ~ NA_character_
+       ), .after = max_crs_grade_0_5) %>% 
+  mutate(gr2_CRS = case_when(
+    max_crs_grade_0_5 %in% c(0:1)                      ~ "Grade <2",
+    max_crs_grade_0_5 %in% c(2:5)                      ~ "Grade ≥2",
+    TRUE                                               ~ NA_character_
+  ), .after = CRS_any) %>%
+  mutate(day_of_onset_crs_relative_to_initiation =
+           interval(start = date_of_bs_ab_step_up_d1, end = date_of_onset_of_crs) /
+           duration(n =1, unit = "days")
+  ) %>%
+  mutate(day_of_max_crs_relative_to_initiation =
+           interval(start = date_of_bs_ab_step_up_d1, end = date_of_max_crs) /
+           duration(n =1, unit = "days")
+  ) %>%
+  mutate(day_of_onset_icans_relative_to_initiation =
+           interval(start = date_of_bs_ab_step_up_d1, end = date_of_onset_of_icans) /
+           duration(n =1, unit = "days")
+  ) %>%
+  mutate(day_of_max_icans_grade_relative_to_initiation =
+           interval(start = date_of_bs_ab_step_up_d1, end = date_of_max_ican) /
+           duration(n =1, unit = "days")
+  ) %>%
+  # censored days > 100 to 100
+  # mutate(across(c(day_of_onset_crs_relative_to_initiation,
+  #                 day_of_max_crs_relative_to_initiation,
+  #                 day_of_onset_icans_relative_to_initiation,
+  #                 day_of_max_icans_grade_relative_to_initiation), ~ case_when(
+  #   . > 100                                                       ~ 100,
+  #   TRUE                                                          ~ as.numeric(.)
+  # ))) %>%
+
+  # ICANS ----
+  mutate(ICANS_any = ifelse(max_icans_grade == 0, "No", "Yes"),
+       ICANS_any2 = ifelse(ICANS_any == "No", 0, 1),
+       ICANS_gradecat = case_when(
+         max_icans_grade == 0                                ~ "No ICANS",
+         max_icans_grade == 1                                ~ "Grade 1 or 2",
+         max_icans_grade == 2                                ~ "Grade 1 or 2",
+         max_icans_grade >= 3                                ~ "Grade ≥3"),
+       ICANS_gradecat = factor(ICANS_gradecat, levels = c("No ICANS", "Grade 1 or 2", "Grade ≥3")),
+       gr3_ICANS = case_when(
+         max_icans_grade %in% c(0:2)                         ~ "Grade <3",
+         max_icans_grade %in% c(3:5)                         ~ "Grade ≥3",
+         TRUE                                          ~ NA_character_
+       ), .after = max_icans_grade) %>% 
+  mutate(gr2_ICANS = case_when(
+    max_icans_grade %in% c(0:1)                              ~ "Grade <2",
+    max_icans_grade %in% c(2:5)                              ~ "Grade ≥2",
+    TRUE                                               ~ NA_character_
+  ), .after = ICANS_any2)
+  # BCMA ----
+
+```
+
+```{r survival}
+cart3 <- cart2 %>% 
+  # pfs
+  mutate(pfs_event = case_when(
+    !is.na(date_of_pd) | !is.na(date_of_death)         ~ 1,
+    TRUE                                               ~ 0
+  ), .after = death_yes_no) %>% 
+  mutate(pfs_date = coalesce(date_of_pd, date_of_death, date_of_last_contact), 
+         .after = death_yes_no) %>% 
+  mutate(pfs_from_initiation_months = 
+           interval(
+             start = date_of_bs_ab_step_up_d1, 
+             end = pfs_date)/
+           duration(n=1, units = "months"), 
+         .after = death_yes_no) %>% 
+  # os 
+  mutate(os_event = case_when(
+    !is.na(date_of_death)                              ~ 1,
+    TRUE                                               ~ 0
+  ), 
+  .after = death_yes_no) %>% 
+  mutate(os_date = coalesce(date_of_death, date_of_last_contact), 
+         .after = death_yes_no) %>% 
+  mutate(os_from_initiation_months = 
+           interval(
+             start = date_of_bs_ab_step_up_d1, 
+             end = os_date)/
+           duration(n=1, units = "months"), 
+         .after = death_yes_no)
+```
+
+```{r response}
+cart4 <- cart3 %>%   
+  # mutate(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd = case_when(
+  #   str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "evaluable")   ~ NA_character_,
+  #   TRUE           ~ day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd
+  # )) %>% 
+  mutate(day30_response = case_when(
+    (os_event == 1 | pfs_event == 1) & 
+      pfs_from_initiation_months < 1                                   ~ "Died or progressed before day 30",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "EVAL")        ~ NA_character_,
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "VGPR")        ~ "VGPR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "PR")          ~ "PR",
+    # str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "UCR")	       ~ "UCR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "CR")          ~ "sCR or CR",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "MR") |
+      str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "SD")        ~ "SD",
+    str_detect(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, "PD")          ~ "PD",
+    is.na(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd
+  ), .after = day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd) %>% 
+  mutate(day30_response_v2 = case_when(
+    str_detect(day30_response, "Died")                               ~ "PD",
+    is.na(day30_response)                                            ~ NA_character_,
+    TRUE           ~ day30_response
+  ), .after = day30_response) %>% 
+  mutate(ORR_30days = case_when(
+    str_detect(day30_response_v2, "CR|PR")                           ~ "ORR",
+    is.na(day30_response_v2)                                         ~ NA_character_,
+    TRUE                                                             ~ "PD/SD/MR"
+  ), .after = day30_response_v2) %>% 
+  mutate(CRorbetter_30days = case_when(
+    str_detect(day30_response_v2, "CR")	                             ~ "sCR or CR",
+    is.na(day30_response_v2)                                         ~ NA_character_,
+    TRUE                                                             ~ "Others"
+  ), .after = ORR_30days) %>% 
+  # Day 90 response ----
+  mutate(mon3_response = case_when(
+    day30_response_v2 == "PD"                                        ~ "PD",
+    (os_event == 1 | pfs_event == 1) & 
+      pfs_from_initiation_months < 3                                   ~ "Died or progressed before 3 months",
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "EVAL")      ~ NA_character_,
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "VGPR")      ~ "VGPR",
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "PR")        ~ "PR",
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "CR")	       ~ "sCR or CR",
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "MR") |
+      str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "SD")      ~ "SD",
+    str_detect(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, "PD")       ~ "PD",
+    is.na(day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd)                     ~ NA_character_,
+    TRUE           ~ day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd
+  ), .after = day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd) %>% 
+  mutate(mon3_response_v2 = case_when(
+    str_detect(mon3_response, "Died")                              ~ "PD",
+    is.na(mon3_response)                                           ~ NA_character_,
+    TRUE           ~ mon3_response
+  ), .after = mon3_response) %>% 
+  mutate(ORR_mon3 = case_when(
+    str_detect(mon3_response_v2, "CR|PR")                          ~ "ORR",
+    is.na(mon3_response_v2)                                        ~ NA_character_,
+    TRUE                                                            ~ "PD/SD/MR"
+  ), .after = mon3_response_v2) %>% 
+  mutate(CRorbetter_mon3 = case_when(
+    mon3_response_v2 == "sCR or CR"                        	      ~ "sCR or CR",
+    is.na(mon3_response_v2)                                        ~ NA_character_,
+    TRUE                                                            ~ "Others"
+  ), .after = ORR_mon3) %>% 
+    
+    # Best response
+  mutate(ORR_as_best_response = case_when(
+    ORR_30days == "ORR" |
+    ORR_mon3 == "ORR" #|
+    # ORR_mon6 == "ORR" |
+    # ORR_mon9 == "ORR" |
+    # ORR_mon12 == "ORR"                                            
+                                                                  ~ "ORR",
+    is.na(ORR_30days) & 
+      is.na(ORR_mon3) #& 
+      # is.na(ORR_mon6) & 
+      # is.na(ORR_mon9) &
+      # is.na(ORR_mon12)                                            
+                                                                  ~ NA_character_, 
+     TRUE                                                         ~ "SD/PD"
+  ), .after = CRorbetter_mon3) %>% 
+  mutate(best_CRorbetter = case_when(
+     CRorbetter_30days == "sCR or CR" | 
+       CRorbetter_mon3 == "sCR or CR" #| 
+       # CRorbetter_mon6 == "sCR or CR" | 
+       # CRorbetter_mon9 == "sCR or CR" | 
+       # CRorbetter_mon12 == "sCR or CR"                            
+                                                                   ~ "sCR or CR",
+     is.na(CRorbetter_30days) & 
+       is.na(CRorbetter_mon3) #& 
+       # is.na(CRorbetter_mon6) & 
+       # is.na(CRorbetter_mon9) & 
+       # is.na(CRorbetter_mon12) 
+                                                                   ~ NA_character_, 
+     TRUE                                                         ~ "< CR"
+   ), .after = CRorbetter_mon3) %>%
+  mutate(best_response = case_when(
+    day30_response_v2 == "sCR or CR" |
+      mon3_response_v2 == "sCR or CR" #|
+      # mon6_response_v2 == "sCR or CR" |
+      # mon9_response_v2 == "sCR or CR" |
+      # mon12_response_v2 == "sCR or CR"                            
+                                                                  ~ "sCR or CR",
+    day30_response_v2 == "VGPR" |
+      mon3_response_v2 == "VGPR" #|
+      # mon6_response_v2 == "VGPR" |
+      # mon9_response_v2 == "VGPR" |
+      # mon12_response_v2 == "VGPR"                                 
+                                                                  ~ "VGPR",
+    day30_response_v2 == "PR" |
+      mon3_response_v2 == "PR" #|
+      # mon6_response_v2 == "PR" |
+      # mon9_response_v2 == "PR" |
+      # mon12_response_v2 == "PR"                                   
+                                                                  ~ "PR",
+    day30_response_v2 == "SD" |
+      mon3_response_v2 == "SD" #|
+      # mon6_response_v2 == "SD" |
+      # mon9_response_v2 == "SD" |
+      # mon12_response_v2 == "SD"                                   
+                                                                  ~ "SD",
+    day30_response_v2 == "PD" |
+      mon3_response_v2 == "PD" #|
+      # mon6_response_v2 == "PD" |
+      # mon9_response_v2 == "PD" |
+      # mon12_response_v2 == "PD"                                   
+                                                                  ~ "PD",
+    TRUE                                                          ~ NA_character_
+  ), .after = best_CRorbetter) %>% 
+  mutate(best_ORRcollapsed = case_when(
+    str_detect(best_response, "CR|PR")                            ~ "PR or better", 
+    str_detect(best_response, "SD|PD")                            ~ "< PR",
+    TRUE                                                          ~ NA_character_
+  ), .after = best_response) #%>% 
+  # MRD----
+  # mutate(across(c(contains("mrd_by_")),
+  #           ~ case_when(
+  #             . == "Positive"                                     ~ "Positive",
+  #             . == "Negative"                                     ~ "Negative",
+  #             TRUE                                                ~ NA_character_
+  #           ))) %>%
+  # mutate(MRD_day30 = coalesce(day_30_mrd_by_clono_seq_positive_vs_negative, 
+  #                              day_30_mrd_by_flow_positive_vs_negative
+  # )) %>%
+  # mutate(MRD_mon3 = coalesce(x3_month_mrd_by_clono_seq_positive_vs_negative,
+  #                              x3_month_mrd_by_flow_positive_vs_negative
+  # )) %>% 
+  # mutate(MRD_mon6 = coalesce(x6_month_mrd_by_clono_seq_positive_vs_negative,
+  #                              x6_month_mrd_by_flow_positive_vs_negative
+  # )) %>%
+  # mutate(MRD_mon9 = coalesce(x9_month_mrd_by_clono_seq_positive_vs_negative,
+  #                              x9_month_mrd_by_flow_positive_vs_negative
+  # )) %>% 
+  # mutate(MRD_mon12 = coalesce(x12_month_mrd_by_clono_seq_positive_vs_negative,
+  #                              x12_month_mrd_by_flow_positive_vs_negative
+  # )) %>% 
+  # mutate(response_MRD_day30 = case_when(
+  #   day30_response_v2 == "sCR or CR" & 
+  #     MRD_day30 == "Negative"                                     ~ "sCR or CR, MRD-",
+  #   day30_response_v2 == "sCR or CR" & 
+  #     MRD_day30 == "Positive"                                     ~ "sCR or CR, MRD+",
+  #   day30_response_v2 == "sCR or CR" & 
+  #     is.na(MRD_day30)                                            ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ day30_response_v2
+  # )) %>%
+  # mutate(response_MRD_mon3 = case_when(
+  #   mon3_response_v2 == "sCR or CR" & 
+  #     MRD_mon3 == "Negative"                                      ~ "sCR or CR, MRD-",
+  #   mon3_response_v2 == "sCR or CR" & 
+  #     MRD_mon3 == "Positive"                                      ~ "sCR or CR, MRD+",
+  #   mon3_response_v2 == "sCR or CR" & 
+  #     is.na(MRD_mon3)                                             ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ mon3_response_v2
+  # )) %>%
+  # mutate(response_MRD_mon6 = case_when(
+  #   mon6_response_v2 == "sCR or CR" & 
+  #     MRD_mon6 == "Negative"                                      ~ "sCR or CR, MRD-",
+  #   mon6_response_v2 == "sCR or CR" & 
+  #     MRD_mon6 == "Positive"                                      ~ "sCR or CR, MRD+",
+  #   mon6_response_v2 == "sCR or CR" & 
+  #     is.na(MRD_mon6)                                             ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ mon6_response_v2
+  # )) %>%
+  # mutate(response_MRD_mon9 = case_when(
+  #   mon9_response_v2 == "sCR or CR" & 
+  #     MRD_mon9 == "Negative"                                      ~ "sCR or CR, MRD-",
+  #   mon9_response_v2 == "sCR or CR" & 
+  #     MRD_mon9 == "Positive"                                      ~ "sCR or CR, MRD+",
+  #   mon9_response_v2 == "sCR or CR" & 
+  #     is.na(MRD_mon9)                                             ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ mon9_response_v2
+  # )) %>%
+  # mutate(response_MRD_mon12 = case_when(
+  #   mon12_response_v2 == "sCR or CR" & 
+  #     MRD_mon12 == "Negative"                                      ~ "sCR or CR, MRD-",
+  #   mon12_response_v2 == "sCR or CR" & 
+  #     MRD_mon12 == "Positive"                                      ~ "sCR or CR, MRD+",
+  #   mon12_response_v2 == "sCR or CR" & 
+  #     is.na(MRD_mon12)                                             ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ mon12_response_v2
+  # )) %>% 
+  # mutate(best_response_MRD = case_when (
+  #   response_MRD_day30 == "sCR or CR, MRD-" | 
+  #     response_MRD_mon3 == "sCR or CR, MRD-" | 
+  #     response_MRD_mon6 == "sCR or CR, MRD-" | 
+  #     response_MRD_mon9 == "sCR or CR, MRD-" | 
+  #     response_MRD_mon12 == "sCR or CR, MRD-"                      ~ "sCR or CR, MRD-",
+  #    response_MRD_day30 == "sCR or CR, MRD+" | 
+  #     response_MRD_mon3 == "sCR or CR, MRD+" | 
+  #     response_MRD_mon6 == "sCR or CR, MRD+" | 
+  #     response_MRD_mon9 == "sCR or CR, MRD+" | 
+  #     response_MRD_mon12 == "sCR or CR, MRD+"                      ~ "sCR or CR, MRD+",
+  #    response_MRD_day30 == "sCR or CR, MRD unknown" | 
+  #     response_MRD_mon3 == "sCR or CR, MRD unknown" | 
+  #     response_MRD_mon6 == "sCR or CR, MRD unknown" | 
+  #     response_MRD_mon9 == "sCR or CR, MRD unknown" | 
+  #     response_MRD_mon12 == "sCR or CR, MRD unknown"               ~ "sCR or CR, MRD unknown",
+  #   TRUE ~ best_response
+  # )) %>%
+  # mutate(MRDneg_in_best_response = case_when(
+  #   MRD_day30 ==  "Negative" |
+  #     MRD_mon3 ==  "Negative" |
+  #     MRD_mon6 ==  "Negative" |
+  #     MRD_mon9 ==  "Negative" |
+  #     MRD_mon12 ==  "Negative"                                    ~ "Negative",
+  #   MRD_day30 ==  "Positive" |
+  #   MRD_mon3 ==  "Positive" |
+  #   MRD_mon6 ==  "Positive" |
+  #   MRD_mon9 ==  "Positive" |
+  #     MRD_mon12 ==  "Positive"                                    ~ "Positive",
+#   TRUE                                                          ~ NA_character_
+# )) %>% 
+  # mutate(bridging_response = case_when(
+  #   response_to_bridging_chemotherapy == "MR" |
+  #     response_to_bridging_chemotherapy == "SD/MR" |
+  #     response_to_bridging_chemotherapy == "SD" |
+  #     response_to_bridging_chemotherapy == "PD" |
+  #     response_to_bridging_chemotherapy == "No"               ~ "SD/PD",
+  #   response_to_bridging_chemotherapy == "CR" |
+  #     response_to_bridging_chemotherapy == "PR" |
+  #     response_to_bridging_chemotherapy == "VGPR"             ~ "PR or better",
+  #   response_to_bridging_chemotherapy == "Not Evaluable" |
+  #     response_to_bridging_chemotherapy == "ND" |
+  #     response_to_bridging_chemotherapy == "Unknown"          ~ NA_character_,
+  #   TRUE                                                      ~ NA_character_ 
+  # ))
+```
+
+
+```{r infection}
+bsab_data <- cart4 %>%
+  # Infection ----
+  mutate(time_from_bsab_therapy_to_infection_days = 
+           interval(
+             start = date_of_bs_ab_step_up_d1, 
+             end = date_of_infection_1st)/
+           duration(n=1, units = "days"), 
+         # no need of the following for this data but keep in case
+         time_from_bsab_therapy_to_infection_days = case_when(
+    time_from_bsab_therapy_to_infection_days >= 0     ~ time_from_bsab_therapy_to_infection_days,
+    TRUE                                          ~ NA_real_
+    ), .after = date_of_infection_1st) #%>% 
+  # mutate(any_infection = case_when(
+  #   time_from_bsab_therapy_to_infection_days >= 0     ~ infection_yes_1_no_0,
+  #   TRUE                                          ~ "No"
+  # )) %>%
+  # mutate(any_sevinfection = case_when(
+  #   time_from_bsab_therapy_to_infection_days >= 0     ~ severe_infection_need_for_iv_antibiotics_and_or_hospitalization_yes_1_no_0,
+  #   TRUE                                          ~ "No"
+  # )) %>% 
+  # mutate(across(c("infection_type_details", "infection_type_bacterial_viral_fungal_parasitic",
+  #                 "infection_type_cat"), ~ case_when(
+  #   time_from_bsab_therapy_to_infection_days >= 0     ~ .,
+  #   TRUE                                          ~ NA_character_
+  # ))) %>% 
+  # mutate(overall_hlh = case_when(
+  #   hlh == "Yes" |
+  #   hlh_hlh_like_toxicities == "Yes"              ~ "Yes",
+  #   hlh == "No" &
+  #   hlh_hlh_like_toxicities == "No"               ~ "No"
+  # ))
+  
+
+# cart7 <- cart6 %>% 
+#   mutate(infection = case_when(
+#     notinfused=="YES" ~ NA_character_,
+#     notinfused=="NO" & is.na(`Infection Type`) & is.na(`Infection (Yes, No)`) ~ NA_character_,
+#     notinfused=="NO" & `Infection Type` == "No" ~ "No", 
+#     notinfused=="NO" & `Infection Type` != "No" ~ "Yes",
+#     notinfused=="NO" & is.na(`Infection Type`) ~ "No",
+#     TRUE ~ NA_character_
+#   )) %>%
+#   mutate(infection_type = case_when(
+#     infection=="No" | is.na(infection) ~ NA_character_,
+#     infection=="Yes" & `Infection Details (specific infection, ie. E.coli bacteremia, etc.)` == "fungus was unidentified" ~ "Fungal",
+#     infection== "Yes" & `Infection Details (specific infection, ie. E.coli bacteremia, etc.)` == "E. coli bacteremia and Salmonella GI infection treated with ceftriaxone x 7 days" ~ "Bacterial",
+#     infection=="Yes" & `Infection Type`=="bacterial + viral" ~ "Bacterial + Viral",
+#     infection=="Yes" & `Infection Type`=="viral" ~ "Viral",
+#     infection=="Yes" & `Infection Type`=="All of the above" ~ "Bacterial, Viral, and Fungal",
+#     infection=="Yes" & `Infection Type`=="Bacterial; Viral; Bacterial" ~ "Bacterial + Viral",
+#     infection=="Yes" & `Infection Type`=="Viral; Bacterial; Bacterial" ~ "Bacterial + Viral",
+#     TRUE ~ `Infection Type`
+#   )) %>% 
+#   mutate(infection_severity = case_when(
+#      infection=="No" | is.na(infection) ~ NA_character_,
+#      infection=="Yes" & is.na(`Infection Severity (Severe = hospitalization or requiring IV antibiotics)`) ~ NA_character_,
+#      infection=="Yes" & `Infection Severity (Severe = hospitalization or requiring IV antibiotics)`=="severe" ~ "Severe",
+#      infection=="Yes" & `Infection Severity (Severe = hospitalization or requiring IV antibiotics)`=="Yes" ~ "Severe",
+#      infection=="Yes" & `Infection Severity (Severe = hospitalization or requiring IV antibiotics)`=="non-severe" ~ "Not severe",
+#     infection=="Yes" & `Infection Severity (Severe = hospitalization or requiring IV antibiotics)`=="Non-Severe" ~ "Not severe",
+#     TRUE ~ `Infection Severity (Severe = hospitalization or requiring IV antibiotics)`
+#   )) %>%
+#   mutate(infection_type = factor(infection_type, levels = c("Bacterial", "Fungal", "Viral", "Bacterial + Fungal", "Bacterial + Viral", "Bacterial, Viral, and Fungal")))
+```
+
+```{r Labeling}
+## Labeling ----
+var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", agecat = "Patient age - Categories", 
+                             
+                             bs_ab_name_tec_1_tal_2_elra_3 = "Therapy name",
+                             bs_ab_served_only_as_pre_car_t_bridging_0_no_1_yes = "Served as pre-CART bridging",
+                             pfs_with_1st_line_mm_diagnosis_18_months_0_no_1_yes = "PFS 1st line",
+                             
+                             
+                         male_sex = "Male Sex", sex_0_male_1_female = "Sex",
+                         race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5 = "Race",
+                         hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown = "Ethnicity",
+                         # race_eth = "Race and ethnicity",
+                         # extramedullary_disease_yes_no = "Extramedullary disease",
+                         # circulating_plasma_cell = "UPDATED Circulating Plasma Cells",
+                         high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1 = 
+                           "High marrow burden (≥50%)",
+                         ecog_ps_at_bs_ab_initiation_0_5 = "ECOG PS at therapy initiation",
+                         # `ECOG > or = 2? (Yes, No)` ,
+                         # r_iss_at_car_t_initiation = "R-ISS at cart initiation",
+                         oligo_or_non_secretory_at_bs_ab_initiation_0_no_1_yes = "Oligo or non secretory at initiation",
+                         myeloma_involved_heavy_chain_ig_g_ig_a_ig_m_ig_d_ig_e_or_blank = "Myeloma involved heavy chain",
+                         myeloma_involved_light_chain_kappa_lambda_biclonal_blank = "Myeloma involved light chain",
+                         prior_cart_0_no_1_yes = "Received prior CART",
+                         amyloidosis_if_yes_fill_out_amyloid_sheet_as_well_please_once_youre_done_with_this_one_0_no_1_yes =
+                           "Amyloidosis",
+                         active_cns_mm_if_yes_fill_out_cns_sheet_as_well_once_done_with_this_one_0_no_1_yes = 
+                           "Active CNS",
+                         pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx = 
+                           "PCL (?5% CPCs) at any point from Dx through last pre-BsAb LoT?",
+                         active_pcl_5_percent_cp_cs_within_30_days_prior_or_after_bs_ab_initiation_0_no_1_yes = 
+                           "Active PCL (?5% CPCs) within 30 days prior or after BsAb initiation?",
+                         percent_cp_cs_if_pb_checked_within_30_days_before_bs_ab_initiation = 
+                           "% CPCs if PB checked within 30 days before BsAb initiation",
+                         prophylactic_tocilizumab_n_0_y_1 = "Prophylactic Tocilizumab",
+                         
+                         cytogenetics = "High risk cytogenetics (not include gain 1q)", 
+                         deletion_17p_prior_to_bs_ab_0_no_1_yes = "Deletion 17p at initiation", 
+                         t_4_14_prior_to_bs_ab_0_no_1_yes = "t(4:14) at initiation", 
+                         t_14_16_prior_to_bs_ab_0_no_1_yes = "t(4:16) at initiation", 
+                         gain_amp1q21_prior_to_bs_ab_0_no_1_yes = "Gain/amp 1q21",
+                         amp_1_q_only_0_no_1_yes = "Amp 1q only",
+                         deletion_1p_0_no_1_yes = "Deletion 1p",
+                         number_of_prior_lines_of_therapy_before_bs_ab = "Number of prior lines of therapy",
+                         number_of_prior_lines_of_therapy_before_bs_ab_cat = "Number of prior lines of therapy (cat)",
+                         # bridging_therapy_yes_no = "Bridging Therapy",
+                         prior_auto_sct_no_0_yes_1 = "Prior autoSCT",
+                         # prior_allo_sct_within_6_months_before_apheresis = "Prior alloSCT",
+                         prior_bcma_directed_therapy_no_0_y_1 = "Prior BCMA-directed therapy",
+                         need_for_gcsf = "Granulocyte colony stimulating factor (G-CSF)",
+                         ivig_use_yes_1_no_0 = "Intravenous immunoglobulin (IVIG)",
+                         # cd34_stem_cell_boost_yes_1_no_0 = "CD34 stem cell boost",
+                         # day_of_neutrophil_recovery = "Day of neutrophil recovery",
+                         # transfusion_postCART = "Transfusion post-CAR T",
+                         need_for_tpo_agonist = "Thrombopoietin (TPO) agonist",
+                         # bmicat = "BMI at apheresis - Normal, Overweight, Obese", 
+                         steroid_use_as_tx_n_0_y_1 = "Steroid Use", tocilizumab_as_tx_n_0_y_1 = "Tocilizumab Use", 
+                         anakinra_n_0_y_1 = "Anakinra Use",
+                         proteasome = "Refractory to Proteasome Inhibitors", 
+                         lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Lenalidomide",
+                         bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Bortezomib", 
+                         carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Carfilzomib", 
+                         pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Pomalidomide",
+                         dara = "Refractory to Daratumumab or Isatuximab",
+                         immuno = "Refractory to Immunomodulators", doubleref = "Double refractory", 
+                         triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1= "Triple refractory", 
+                         penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1= "Penta refractory",
+                         
+                         baseline_b2m_prior_to_bs_ab_initiation = "Baseline B2M prior to therapy",
+                         baseline_ldh_prior_to_bs_ab_initiation_u_l = "Baseline LDH prior to therapy (u/l)",
+                         baseline_albumin_prior_to_bs_ab_initiation_g_d_l = "Baseline albumin prior to therapy (g/dl)",
+                         baseline_ferritin_prior_to_bs_ab_initiation_ng_m_l = "Baseline ferritin prior to therapy (ng/ml)",
+                         max_ferritin = "Max ferritin",
+                         baseline_crp_prior_to_bs_ab_initiation_mg_l = "Baseline CRP prior to therapy (mg/l)",
+                         max_crp = "Max CRP",
+                         baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l = "Baseline Igg prior to therapy (mg/dl)",
+                         baseline_anc_k_u_l_ie_100_200_etc = "Baseline ANC (k/ul) ie_100_200",
+                         baseline_hgb = "Baseline HGB",
+                         baseline_pl_ts = "baseline PLTs",
+                         baseline_alc_k_u_l_ie_100_200_etc = "Baseline ALC (k/ul) ie_100_200",
+                         alc_day_8 = "ALC day8",
+                         alc_day_15 = "ALC day15",
+                         alc_day_22 = "ALC day22",
+                         alc_c2d1 = "ALC C2D1",
+                         c2d1_ig_g_level_if_checked_mg_d_l = "C2D1 Igg (mg/dl)",
+                         anc_nadir_value_during_first_6_cycles_k_u_l_ie_100_200_etc = "ANC during first 6 cycles (nadir)",
+                         hgb_nadir_value_during_first_6_cycles = "HGB during first 6 cycles (nadir)",
+                         plt_nadir_value_during_first_6_cycles = "PLT during first 6 cycles (nadir)",
+                         ig_g_nadir_during_first_6_cycles_mg_d_l = "Igg during first 6 cycles (nadir)",
+                         cr_cl_prior_to_step_up_dose_number_1_m_l_min = "CrCl prior to step up dose 1 (ml/min)",
+                         cr_cl_at_d30 = "CrCl day 30",
+                         cr_cl_at_d90 = "CrCl day 90",
+                         hemodialysis_pre_bs_ab_y_1_n_0 = "Hemodialysis pre-BsAb",
+                         hemodialysis_post_bs_ab_y_1_n_0 = "Hemodialysis post-BsAb",
+                         number_of_prior_bcma_directed_agents = "Number of prior BCMA",
+                         prior_adc_yes_no = "Prior ADC",
+                         prior_adc_name = "Prior ADC name",
+                         # prior_cart_yes_no = "Prior CART",
+                         prior_cart_name = "Prior CART name",
+                         prior_bs_ab_yes_no = "Prior BsAb",
+                         prior_bs_ab_name = "Prior BsAb name",
+                         prior_gprc5d_yes_no = "Prior gprc5d",
+                         talquetamab_toxicities_oral_toxicities_e_g_dysgeusia_if_so_describe =
+                           "Talquetamab toxicities",
+                         just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal = 
+                           "EMD prior to BsAb initiation",
+                         total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 =
+                           "Total number true EMD",
+                         total_number_paraskelatal_plasmacytomas = "Total number paraskelatal plasmacytomas",
+                         true_emd_relapse_yes_no = "True EMD relapse",
+                         best_documented_emd_response = "Best documented EMD response",
+                         xrt_2_weeks_before_and_after_3_months_of_bs_ab_starting_yes_no_response =
+                           "XRT 2 weeks before and after  3 months of BsAb",
+                         # bmicat2 = "BMI at apheresis - Normal vs. Overweight/Obese", 
+                         max_crs_grade_0_5 = "CRS Grade (0-5)",
+                         CRS_any = "Any CRS", CRS_gradecat = "CRS Grade", 
+                         gr2_CRS = "Grade2 CRS",
+                         gr3_CRS = "Grade3 CRS",
+                         recurrent_crs_n_0_y_1 = "Recurrent CRS",
+                         max_icans_grade = "ICANS Grade (0-5)",
+                         ICANS_any = "Any ICANS", ICANS_gradecat = "ICANS Grade", 
+                         gr2_ICANS = "Grade 2 ICANS",
+                         day_of_onset_crs_relative_to_initiation = "Day of onset of CRS relative to initiation",
+                         day_of_max_crs_relative_to_initiation = "Day of Max CRS (relative to initiation)",
+                         duration_of_crs_days = "Duration of CRS (days)", 
+                         day_of_onset_icans_relative_to_initiation = "Day of onset of ICANS relative to initiation",
+                         day_of_max_icans_grade_relative_to_initiation = "Day of Max ICANS (relative to initiation)",
+                         duration_of_icans_days = "Duration of ICANS (days)", 
+                         # delayed_neuro = "Delayed Neurotoxicity",
+                         # parkinsonian_neurotoxicity_yes_no = "Parkinsonian Neurotoxicity",
+                         # other_delayed_non_parkinsonian_neurologic_toxicity_yes_no = 
+                         #   "Other/Delayed Non-Parkinsonian Neurologic Toxicity",
+                         # delayed_neuro_type = "Delayed Neurotoxicity Type",
+                         # hlh = "HLH", hlh_hlh_like_toxicities = "HLH/HLH-Like Toxicities?",
+                         # overall_hlh = "Combined HLHs",
+                         infection_n_0_y_1 = "Infection",
+                         time_from_bsab_therapy_to_infection_days = "Time from BsAb to infection (days)",
+                         number_of_infections = "Total number of infections",
+                         number_infection_1_bacterial_viral_fungal = "Infection type (1st)",
+                         infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics = "Infection severity (1st)",
+                         number_infection_2_bacterial_viral_fungal = "Infection type (2nd)",
+                         infection_severity_2nd_severe_hospitalization_or_requiring_iv_antibiotics = "Infection severity (2nd)",
+                         number_infection_3_bacterial_viral_fungal = "Infection type (3rd)",
+                         infection_severity_3rd_severe_hospitalization_or_requiring_iv_antibiotics = "Infection severity (3rd)",
+                         number_infection_4_bacterial_viral_fungal = "Infection type (4th)",
+                         infection_severity_4th_severe_hospitalization_or_requiring_iv_antibiotics = "Infection severity (4th)",
+                         
+                         treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays =
+                           "Cause for treatment delays during first cycle",
+                         icu_admission_during_first_cycle_n_0_y_1 = "ICU admission during first cycle",
+                         days_of_icu_admission = "Days of ICU admission",
+                         in_out_patient = "In/Out patient",
+                         if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions = 
+                           "Length of hospital stay total (days)",
+                         # tbv = "TBV", whole_blood_processed_m_l = "Whole blood processed (mL)",
+                         # final_collection_volume_m_l = "Final collection volume (mL)", 
+                         # tbv_processed = "TBV processed", 
+                         # access_type = "Access type", total_bags = "Total bags",
+                         # run_time_min = "Run time (min)",
+                         # total_dose_volume_m_l = "Total dose volume (mL)", 
+                         # cell_dose_million_cells = "Total cell dose (million cells)",
+                         day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd = "Raw day 30 Response",
+                         day30_response = "Day 30 Response - Evaluable patients",
+                         day30_response_v2 = "Day 30 Response - All patients",
+                         ORR_30days = "Day 30 ORR",
+                         CRorbetter_30days = "Day 30 CR or better - Evaluable patients",
+                         
+                         day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd = "Raw day 90 Response",
+                         mon3_response = "Day 90 Response - Evaluable patients",
+                         mon3_response_v2 = "Day 90 Response - All patients",
+                         ORR_mon3 = "Day 90 ORR",
+                         CRorbetter_mon3 = "Day 90 CR or better - Evaluable patients",
+                         
+                         best_CRorbetter = "Best CR or better - Evaluable patients",
+                         best_response = "Best Response - Evaluable patients",
+                         best_ORRcollapsed = "Best ORR at ≤ 3 months",
+                         ORR_as_best_response = "ORR as best response",
+                         best_response_s_cr_cr_vgpr_pr_mr_sd_pd = "Raw best response",
+                         best_response_mrd_flow_positive_vs_negative = "Raw best MRD response (flow)",
+                         best_response_mrd_clonoseq_positive_vs_negative = "Raw best MRD response (clonoseq)",
+                         progression_yes_no = "Progression",
+                         pfs_event = "PFS events",
+                         pfs_from_initiation_months = "PFS time (months)",
+                         death_yes_no = "Death",
+                         os_event = "OS events",
+                         os_from_initiation_months = "Follow-up time from initiation (months)",
+                         cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain =
+                           "Cause of death",
+
+                         discontinuation_yes_no = "Discontinuation",
+
+                         eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1 =
+                           "Eligible for corresponding BsAb trial on first dose"#,
+                         # best_response = "Best response in first 90 days"
+) 
+
+```
+<br>
+
+
+
+# Tables
+## Table 1. Patient characteristics
+```{r Table 1}
+bsab_data %>% 
+  select(age_at_bs_ab_initiation, agecat, 
+         sex_0_male_1_female, #male_sex, 
+         race_white_0_black_1_aapi_2_american_indian_3_other_4_unk_5, 
+         hispanic_1_if_hispanic_latin_x_or_spanish_origin_0_if_no_unknown, 
+         ecog_ps_at_bs_ab_initiation_0_5,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    # type = list(
+    #   c(agecat, sex, 
+    #     extramedullary_disease_yes_no, high_marrow_burden_50_percent,
+    #     cytogenetics, cytogenetics_incl_1q,
+    #     deletion_17p_prior_to_bs_ab_0_no_1_yes,
+    #     t_4_14_prior_to_bs_ab_0_no_1_yes,
+    #     t_14_16_prior_to_bs_ab_0_no_1_yes, gain_amp1q21,
+    #     bridging_therapy_yes_no, prior_auto_sct_no_0_yes_1,
+    #     prior_bcma_directed_therapy_no_0_y_1,
+    #     # `Received alkylating therapy with bridging (Yes=1, No=0)`,
+    #     immuno, proteasome, dara, doubleref, triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1, penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1,
+    #     did_patient_meet_eligibility_criteria_for_cartitude_1_on_the_day_of_apheresis_yes_no,
+    #     ht_score, early_icaht_cat, any_early_icaht,
+    #      gr3_early_icaht, 
+    #      late_icaht_cat, any_late_icaht,
+    #      gr3_late_icaht)
+    #   ~"categorical"),
+    
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 2. Disease characteristics
+```{r Table 2}
+bsab_data %>% 
+  select(oligo_or_non_secretory_at_bs_ab_initiation_0_no_1_yes, myeloma_involved_heavy_chain_ig_g_ig_a_ig_m_ig_d_ig_e_or_blank, 
+         myeloma_involved_light_chain_kappa_lambda_biclonal_blank, 
+         high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1,
+         cytogenetics, deletion_17p_prior_to_bs_ab_0_no_1_yes, 
+         t_4_14_prior_to_bs_ab_0_no_1_yes, t_14_16_prior_to_bs_ab_0_no_1_yes, gain_amp1q21_prior_to_bs_ab_0_no_1_yes, 
+         amp_1_q_only_0_no_1_yes, deletion_1p_0_no_1_yes,
+         amyloidosis_if_yes_fill_out_amyloid_sheet_as_well_please_once_youre_done_with_this_one_0_no_1_yes, 
+         active_cns_mm_if_yes_fill_out_cns_sheet_as_well_once_done_with_this_one_0_no_1_yes, 
+         pcl_5_percent_cp_cs_at_any_point_from_dx_through_last_pre_bs_ab_lo_t_0_no_1_secondary_pcl_not_at_dx_2_primary_pcl_at_dx, 
+         active_pcl_5_percent_cp_cs_within_30_days_prior_or_after_bs_ab_initiation_0_no_1_yes, 
+         eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 3. Hospital
+```{r table 3}
+bsab_data %>% 
+  select(in_out_patient,
+         if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions, 
+         icu_admission_during_first_cycle_n_0_y_1, days_of_icu_admission
+         ) %>%
+  tbl_summary(type = list(days_of_icu_admission ~ "continuous"),
+              statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+              digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>%# add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 4. Baseline
+```{r table 4}
+bsab_data %>% 
+  select(percent_cp_cs_if_pb_checked_within_30_days_before_bs_ab_initiation,
+         baseline_b2m_prior_to_bs_ab_initiation, 
+         baseline_ldh_prior_to_bs_ab_initiation_u_l, baseline_albumin_prior_to_bs_ab_initiation_g_d_l, 
+         baseline_ferritin_prior_to_bs_ab_initiation_ng_m_l, max_ferritin, 
+         baseline_crp_prior_to_bs_ab_initiation_mg_l, max_crp, 
+         baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l,
+         ig_g_nadir_during_first_6_cycles_mg_d_l,
+         c2d1_ig_g_level_if_checked_mg_d_l, 
+         baseline_anc_k_u_l_ie_100_200_etc, anc_nadir_value_during_first_6_cycles_k_u_l_ie_100_200_etc, 
+         baseline_hgb, hgb_nadir_value_during_first_6_cycles, 
+         baseline_pl_ts, plt_nadir_value_during_first_6_cycles, 
+         baseline_alc_k_u_l_ie_100_200_etc, alc_day_8, alc_day_15, alc_day_22, alc_c2d1, 
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 5. Therapies
+```{r table 5}
+bsab_data %>% 
+  select(bs_ab_name_tec_1_tal_2_elra_3, bs_ab_served_only_as_pre_car_t_bridging_0_no_1_yes,
+         prior_cart_0_no_1_yes, #prior_cart_yes_no, 
+         prior_cart_name, prior_bs_ab_yes_no, prior_bs_ab_name, 
+         prior_adc_yes_no, prior_adc_name, 
+         prior_bcma_directed_therapy_yes_no, prior_bcma_directed_therapy_no_0_y_1, 
+         number_of_prior_bcma_directed_agents, 
+         type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3, most_recent_bcma_agent_name, 
+         response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6, prior_gprc5d_yes_no,
+         prophylactic_tocilizumab_n_0_y_1,
+         tocilizumab_as_tx_n_0_y_1, steroid_use_as_tx_n_0_y_1, anakinra_n_0_y_1,
+         ivig_use_yes_1_no_0,
+         
+         need_for_gcsf, need_for_tpo_agonist, 
+         
+         treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays,
+         number_of_prior_lines_of_therapy_before_bs_ab_cat,
+         number_of_prior_lines_of_therapy_before_bs_ab, prior_auto_sct_no_0_yes_1, 
+
+         bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2, carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2, 
+         proteasome, 
+         lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2, pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2, 
+         immuno, daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2, dara, 
+         doubleref, 
+         triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1, 
+         penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1,
+
+         talquetamab_toxicities_oral_toxicities_e_g_dysgeusia_if_so_describe, 
+         talquetamab_only_target_dose_for_c2d1_0_4_q1w_0_8_q2w_or_other,
+         x147_reason_for_stopping_talquetamab_if_not_for_pd_be_specific, 
+         x148_tal_specifically_designed_as_pre_car_t_holding_or_bridging_y_n,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 6. Toxicities
+```{r Table 6}
+bsab_data %>% 
+  select(max_crs_grade_0_5, CRS_any, #crs_any_coded_0_1, 
+         CRS_gradecat, 
+         gr2_CRS, gr3_CRS, duration_of_crs_days, 
+         recurrent_crs_n_0_y_1, 
+         day_of_onset_crs_relative_to_initiation, 
+         day_of_max_crs_relative_to_initiation, 
+         max_icans_grade, ICANS_any, ICANS_any2, gr2_ICANS, ICANS_gradecat, 
+         gr3_ICANS, duration_of_icans_days,
+         day_of_onset_icans_relative_to_initiation, day_of_max_icans_grade_relative_to_initiation,
+         cr_cl_prior_to_step_up_dose_number_1_m_l_min, cr_cl_at_d30, cr_cl_at_d90, 
+         hemodialysis_pre_bs_ab_y_1_n_0, 
+         hemodialysis_post_bs_ab_y_1_n_0,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+              type = list(
+                c(duration_of_crs_days, duration_of_icans_days,
+                  day_of_onset_icans_relative_to_initiation, day_of_max_icans_grade_relative_to_initiation) ~ "continuous"),
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+
+## Table 7. Responses
+```{r Table 7}
+bsab_data %>% 
+  select(day_30_response_s_cr_cr_vgpr_pr_mr_sd_pd, 
+         day30_response, day30_response_v2, ORR_30days, CRorbetter_30days, day_90_response_s_cr_cr_vgpr_pr_mr_sd_pd, 
+         mon3_response, mon3_response_v2, ORR_mon3, CRorbetter_mon3, best_CRorbetter, best_response, best_ORRcollapsed, 
+         ORR_as_best_response, best_response_s_cr_cr_vgpr_pr_mr_sd_pd, best_response_mrd_flow_positive_vs_negative, 
+         best_response_mrd_clonoseq_positive_vs_negative,
+         just_prior_to_bs_ab_initiation_is_there_true_emd_if_none_move_to_column_gk_0_none_1_paraskeletal_only_2_true_emd_paraskeletal,
+         total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3, 
+         locations_of_true_emd_be_specific, total_number_paraskelatal_plasmacytomas, 
+         xrt_2_weeks_before_and_after_3_months_of_bs_ab_starting_yes_no_response, best_documented_emd_response, 
+         true_emd_relapse_yes_no, if_yes_what_location_0_same_site_1_new_site_2_both, concurrent_biochemical_relpase_yes_no, 
+         concurrent_pmd_relapse_yes_no,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 8. Clinical outcomes
+```{r Table 8}
+bsab_data %>% 
+  select(progression_yes_no, pfs_from_initiation_months, #pfs_event, 
+         death_yes_no, #os_event, 
+         os_from_initiation_months, 
+         cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+## Table 9. Infections
+```{r table 9}
+bsab_data %>% 
+  select(infection_n_0_y_1, number_of_infections, number_infection_1_bacterial_viral_fungal, 
+         infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics, time_from_bsab_therapy_to_infection_days, 
+         number_infection_2_bacterial_viral_fungal, infection_severity_2nd_severe_hospitalization_or_requiring_iv_antibiotics, 
+         number_infection_3_bacterial_viral_fungal, infection_severity_3rd_severe_hospitalization_or_requiring_iv_antibiotics, 
+         number_infection_4_bacterial_viral_fungal, infection_severity_4th_severe_hospitalization_or_requiring_iv_antibiotics,
+         in_out_patient) %>%
+  tbl_summary(by = in_out_patient,
+              type = list(
+                c(number_of_infections) ~ "continuous"),
+    statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
+    digits = all_continuous() ~ 1
+  ) %>% 
+  bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall() %>% 
+  modify_footnote(list(update = everything() ~ NA))
+```
+
+# Survival
+## OS
+```{r Survival analysis - KM by in_out_patient}
+ggsurvplot(survfit(Surv(os_from_initiation_months, os_event) ~ in_out_patient, 
+                   data = bsab_data),
+           # title = "PFS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1.5,
+
+           xlab = "Time (months)",
+           ylab = "OS (probability)",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE,
+           risk.table = TRUE, risk.table.y.text = TRUE,
+           tables.theme = theme_survminer(#base_size = 5,
+                                          font.main = c(14, "bold", "black"),
+                                          # font.x = c(10, "bold", "black"),
+                                          # font.y = c(16, "bold", "transparent"),
+                                          # font.tickslab = c(19, "bold", "black")
+                                          )
+) %++% guides(colour = guide_legend(nrow = 1))
+
+coxph(Surv(time = bsab_data$os_from_initiation_months, 
+                   event = bsab_data$os_event) ~ in_out_patient, 
+              data = bsab_data)  %>% 
+  tbl_regression(exponentiate = TRUE) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+```
+
+## PFS
+```{r PFS analysis - KM by in_out_patient}
+ggsurvplot(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ in_out_patient, 
+                   data = bsab_data),
+           # title = "PFS Analysis",
+           font.main = c(20, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
+           size = 1.5,
+
+           xlab = "Time (months)",
+           ylab = "PSS (probability)",
+           legend = "top",
+           legend.title = "",
+           pval = TRUE,
+           conf.int = FALSE,
+           # Censor
+           censor = TRUE,
+           risk.table = TRUE, risk.table.y.text = TRUE,
+           tables.theme = theme_survminer(#base_size = 5,
+                                          font.main = c(14, "bold", "black"),
+                                          # font.x = c(10, "bold", "black"),
+                                          # font.y = c(16, "bold", "transparent"),
+                                          # font.tickslab = c(19, "bold", "black")
+                                          )
+) %++% guides(colour = guide_legend(nrow = 1))
+
+coxph(Surv(time = bsab_data$pfs_from_initiation_months, 
+                   event = bsab_data$pfs_event) ~ in_out_patient, 
+              data = bsab_data)  %>% 
+  tbl_regression(exponentiate = TRUE) %>% 
+  bold_p(t = .05) %>% 
+  add_nevent(location = "level") %>% add_n(location = "level")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
