@@ -4089,17 +4089,18 @@ LDH <- fig_dat %>%
                                       "7", "14", "21", "30", "90", "180"))) %>% 
   ggplot(aes(x=day, y=value)) + 
   geom_boxplot() + 
-  xlab("Days") + ylab("LDH represented with a log2 scale") + 
+  xlab("Days") + ylab("LDH (log2 scale)") + 
   theme_classic() + ggtitle("LDH") + 
   scale_y_continuous(trans = "log2") +
-  stat_compare_means(label.x = 1.2 
+  stat_compare_means(label.x = 1.2 , label.y.npc = 0.95,
+                     size = 5
                      # aes(label = paste0("p = ", ..p.format..))
   #                  aes(
   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
   )
 
 
-# cart1$`Ferritin day +7`[cart1$`Ferritin day +7`==">33511"] <- 33511
+# cart1$`Ferritin day +7`[cart1$`Ferritin day +7`==">33511"] <- /33511
 # cart1$`Ferritin day +7` <- as.numeric(cart1$`Ferritin day +7`)
 Ferritin <- fig_dat %>% 
   select(pt_identifier, starts_with("ferritin_"), -ferritin_score) %>% 
@@ -4118,10 +4119,11 @@ Ferritin <- fig_dat %>%
                                       "7", "14", "21", "30", "90", "180"))) %>% 
   ggplot(aes(x=day, y=value)) + 
   geom_boxplot() + 
-  xlab("Days") + ylab("Ferritin represented with a log2 scale") + 
+  xlab("Days") + ylab("Ferritin (log2 scale)") + 
   theme_classic() + ggtitle("Ferritin") + 
   scale_y_continuous(trans = "log2") +
-  stat_compare_means(label.x = 1.2 
+  stat_compare_means(label.x = 1.2 , label.y.npc = 0.95,
+                     size = 5
                      # aes(label = paste0("p = ", ..p.format..))
   #                  aes(
   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
@@ -4154,10 +4156,11 @@ CRP <- fig_dat %>%
                                       "7", "14", "21", "30", "90", "180"))) %>% 
   ggplot(aes(x=day, y=value)) + 
   geom_boxplot() + 
-  xlab("Days") + ylab("CRP represented with a log2 scale") + 
+  xlab("Days") + ylab("CRP (log2 scale)") + 
   theme_classic() + ggtitle("CRP") + 
   scale_y_continuous(trans = "log2") +
-  stat_compare_means(label.x = 1.2
+  stat_compare_means(label.x = 1.2, label.y.npc = 0.95,
+                     size = 5
                      # aes(label = paste0("p = ", ..p.format..))
   #                  aes(
   # label=ifelse(..p.format.. == 1e-04, "p<0.001", "Other")
@@ -4166,11 +4169,24 @@ CRP <- fig_dat %>%
 (LDH) /
 (Ferritin) /
 (CRP)+
-plot_annotation(tag_levels = "A")
+plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 17),
+        text = element_text(size = 16))
 
-# ggsave("Figure S1 Inflammatory markers after cilta-cel.pdf",
+# ggsave("Figure S1 Inflammatory markers after cilta-cel_03-12-25_300dpi.pdf",
 #        width = 6,
 #        height = 10)
+
+
+ggsave("Figure S1 Inflammatory markers after cilta-cel_600dpi_1column_compress.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 11, compression = "lzw")
+
+
+
+
+
 ```
 
 ## Figure 2. Cellular and humoral immune reconstitution after cilta-cel
@@ -4412,12 +4428,40 @@ CD19_fig <- CD19_fig %>%
 (WBC_fig | ANC_fig | CD4_fig) /
   (Hb_fig | ALC_fig | CD8_fig) /
   (Plt_fig | IgG_fig | CD19_fig) +
-  plot_annotation(tag_levels = "A")
+  plot_annotation(tag_levels = "A") &
+  theme(plot.tag = element_text(size = 15),
+        axis.title = element_text(size = 13),
+        axis.text.y = element_text(size = 11),
+        axis.text.x = element_text(size = 8),
+        legend.title = element_text(size = 13),
+        legend.text = element_text(size = 11))
+
+ggsave("Figure 2 Cellular and humoral immune reconstitution after cilta-cel_600dpi_2column.tiff",
+       dpi = 600, units = "in",
+       width = 16,
+       height = 8)
+
+# (WBC_fig | ANC_fig) /
+#   (CD4_fig | Hb_fig) / 
+#   (ALC_fig | CD8_fig) /
+#   (Plt_fig | IgG_fig) / 
+#   (CD19_fig | plot_spacer()) +
+#   plot_annotation(tag_levels = "A") &
+#   theme(plot.tag = element_text(size = 16),
+#         axis.title = element_text(size = 16),
+#         axis.text.y = element_text(size = 14),
+#         axis.text.x = element_text(size = 13),
+#         legend.title = element_text(size = 16),
+#         legend.text = element_text(size = 14))
+# 
+# ggsave("Figure 2 Cellular and humoral immune reconstitution after cilta-cel_600dpi_2column_.jpeg",
+#        dpi = 600, units = "in",
+#        width = 16,
+#        height = 13)
 
 
-# ggsave("Figure 2 Cellular and humoral immune reconstitution after cilta-cel.pdf",
-#        width = 15, 
-#        height = 8)
+
+
 ```
 <br>
 
@@ -4813,7 +4857,7 @@ c %>% filter(grade == "Grade 3+") %>%
              ))+
   geom_bar(stat = "identity",
            position=position_dodge(width=0.9))+
-  geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 3,
+  geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 4,
             position = position_dodge(width=0.9), vjust=-1.5
             )+
   
@@ -4821,11 +4865,34 @@ c %>% filter(grade == "Grade 3+") %>%
   ylim(0, 60)+
   labs(fill = NULL, x= NULL, y = "Percent")+
   theme_classic(base_size = 9)+
-  theme(legend.position="bottom")
+  theme(legend.position="bottom", text = element_text(size = 16))
 
-# ggsave("Figure 3 Cytopenias over time.pdf",
-#        width = 7,
-#        height = 4)
+ggsave("Figure 3 Cytopenias over time_600dpi_1column_compress.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 4, compression = "lzw")
+
+c %>% filter(grade == "Grade 3+") %>% 
+  ggplot(aes(x= day, 
+             y= perc, 
+             fill= name, 
+             ))+
+  geom_bar(stat = "identity",
+           position=position_dodge(width=0.9))+
+  geom_text(aes(label = paste0(round(perc, 0), "%"), y=perc-2), size = 7,
+            position = position_dodge(width=0.9), vjust=-1.5
+            )+
+  
+  scale_fill_brewer(palette = "Spectral")+
+  ylim(0, 60)+
+  labs(fill = NULL, x= NULL, y = "Percent")+
+  theme_classic(base_size = 9)+
+  theme(legend.position="bottom", text = element_text(size = 20))
+ggsave("Figure 3 Cytopenias over time_600dpi_2column_compress.tiff",
+       dpi = 600, units = "in",
+       width = 16,
+       height = 8, compression = "lzw")
+
 
 ```
  
@@ -4908,10 +4975,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days", 
@@ -4932,10 +4999,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days",
@@ -4955,10 +5022,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days",
@@ -4993,10 +5060,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days",
@@ -5032,10 +5099,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days",
@@ -5102,10 +5169,10 @@ risk_comp <- cilta %>%
 #            fun = "event",
 #            
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time in days",
@@ -5177,13 +5244,14 @@ a <- cilta %>%
   geom_violin()+
   geom_jitter(aes(color = `Infection severity`), width = 0.2)+
   # geom_point(aes(color = `Infection severity`), position = "jitter")
-  labs(x = NULL, y = "Infection onset time (days)")+
+  labs(x = NULL, y = "Infection onset (days)")+
   scale_color_manual(values = c("black", "red"))+
   scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
   theme(axis.text.x = element_text(angle = 45, 
                                    hjust = 1#,
                                    # vjust = 0.5
-                                   ))
+                                   ), 
+        text = element_text(size = 15))
 
 b <- cilta %>%
   mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>% 
@@ -5216,14 +5284,15 @@ b <- cilta %>%
   geom_violin()+
   geom_jitter(aes(color = `Infection severity`), width = 0.2)+
   # geom_point(aes(color = `Infection severity`), position = "jitter")
-  labs(x = NULL, y = "Infection onset time (days)")+
+  labs(x = NULL, y = "Infection onset (days)")+
   scale_color_manual(values = c("black", "red"))+
   scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
   # coord_flip()
   theme(axis.text.x = element_text(angle = 45, 
                                    hjust = 1#,
                                    # vjust = 0.5
-                                   ))
+                                   ), 
+        text = element_text(size = 15))
 
 c <- cilta %>%
   mutate(os_from_infusion_days = os_from_infusion_months * 30.417) %>%
@@ -5259,23 +5328,30 @@ c <- cilta %>%
              y = time_from_infusion_to_infection_days))+
   geom_violin()+
   geom_jitter(aes(color = `Infection severity`), width = 0.2)+
-  labs(x = NULL, y = "Infection onset time (days)")+
+  labs(x = NULL, y = "Infection onset (days)")+
   scale_color_manual(values = c("black", "red"))+
   scale_y_continuous(expand = c(0, 5), limits = c(0, 400))+
   # coord_flip()
   theme(axis.text.x = element_text(angle = 45, 
                                    hjust = 1#,
                                    # vjust = 0.5
-                                   ))
+                                   ), 
+        text = element_text(size = 15))
 
 a /
   b /
   c +
-  plot_annotation(tag_levels = "A")
+  plot_annotation(tag_levels = "A")&
+  theme(plot.tag = element_text(size = 15),
+        axis.title = element_text(size = 15),
+        axis.text = element_text(size = 13),
+        legend.text = element_text(size = 15), 
+        legend.title = element_text(size = 15))
 
-# ggsave("Figure 4 Infection density.pdf",
-#        width = 7,
-#        height = 10)
+ggsave("Figure 4 Infection density_600dpi_1column_compress.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 11, compression = "lzw")
 
 ```
 
@@ -5362,11 +5438,15 @@ alluvial_C <- moffitt_subset %>%
 (alluvial_A) /
   (alluvial_B) + #/
   # (alluvial_C) +
-  plot_annotation(tag_levels = "A")
+  plot_annotation(tag_levels = "A")&
+  theme(text = element_text(size = 15)#,
+        # plot.tag = element_text(size = 15)
+        )
 
-# ggsave("Figure S3. Viral titers after cilta-cel.pdf",
-#        width = 7,
-#        height = 10)
+ggsave("Figure S3. Viral titers after cilta-cel_600dpi_1column.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 10, compression = "lzw")
 ```
 
 
@@ -5432,11 +5512,13 @@ alluvial_B <- moffitt_subset %>%
 (alluvial_A) /
   (alluvial_B) + #/
   # (alluvial_C) 
-  plot_annotation(tag_levels = "A")
+  plot_annotation(tag_levels = "A")&
+  theme(text = element_text(size = 15))
 
-# ggsave("Figure S3+day180 Viral titers after cilta-cel.pdf",
-#        width = 7,
-#        height = 10)
+ggsave("Figure S3+day180 Viral titers after cilta-cel_600dpi_1column_compress.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 10, compression = "lzw")
 ```
 
 ## Figure S4. Pneumococcal titers after cilta-cel
@@ -5532,14 +5614,28 @@ ht_list <- Heatmap(df, name = " ",
         column_title = "Patients",
         show_column_names =FALSE,
         row_names_side = "left",
-        row_names_gp = gpar(fontsize = 11),
+        row_names_gp = gpar(fontsize = 14),
+        heatmap_legend_param = list(labels_gp = gpar(fontsize = 14)),
         col = colors)
-pdf("Figure S4 Pneumococcal titers after cilta-cel.pdf", 
+ht_list
+# pdf("Figure S4 Pneumococcal titers after cilta-cel.pdf", 
+#     width = 8,
+#     height = 6)
+# draw(ht_list, heatmap_legend_side = "right")
+# dev.off()
+
+tiff("Figure S4 Pneumococcal titers after cilta-cel_600dpi_1column.tiff", 
+     res = 600, units = "in",
     width = 8,
-    height = 6)
-draw(ht_list, heatmap_legend_side = "right")
+    height = 5)
+ht_list
+# draw(ht_list, heatmap_legend_side = "right")
 dev.off()
 
+ragg::agg_tiff("ht_list.tiff", width = 8,
+    height = 5, units = "in", res = 600, compression = "lzw")
+ht_list
+dev.off()
 
 ```
 
@@ -5678,10 +5774,10 @@ forest_p <-
                  "Number of prior lines of therapy") ) %>% 
   mutate_at(c("OR", "lower", "upper"), ~ as.numeric(.)) %>% 
   mutate(name= case_when(
-    Characteristic == "High marrow burden (≥50%)"      ~ "High marrow burden (≥50%)",
-    Characteristic == "gr3_cytopenia_-5d"      ~ "Grade ≥ 3 Cytopenia at Day -5",
+    Characteristic == "High marrow burden (≥50%)"      ~ "High marrow \nburden (≥50%)",
+    Characteristic == "gr3_cytopenia_-5d"      ~ "Grade ≥ 3 Cytopenia \nat Day -5",
     Characteristic == "Steroid Use"      ~ "Steroid use",
-    Characteristic == "Number of prior lines of therapy"      ~ "Number of prior lines of therapy",
+    Characteristic == "Number of prior lines of therapy"      ~ "Number of prior \nlines of therapy",
     Characteristic == "baseline_ferritin_cat"      ~ "Baseline ferritin"
   ))
 
@@ -5691,12 +5787,17 @@ ggplot(data=forest_p, aes(y=name, x=OR, xmin=lower, xmax=upper)) +
   geom_vline(xintercept=1, color='black', linetype='dashed', alpha=.5) +
   theme_classic()+
   scale_x_log10(breaks = c(0, 0.25, 0.5, 1, 2.5, 5, 10, 40))+
-  labs(y="")
+  labs(y="") %>% 
+  theme(text = element_text(size = 15),
+        axis.title.y = element_blank())
 
-# ggsave("Figure S2 Forest plot 5 variables.pdf", 
-#        device = cairo_pdf,
-#        width = 7,
-#        height = 6)
+ggsave("Figure S2 Forest plot 5 variables_600dpi_1column_wraplabel_compress.tiff",
+       dpi = 600, units = "in",
+       width = 8,
+       height = 4, compression = "lzw"#6
+       )
+
+
 
 ```
 
@@ -5772,9 +5873,9 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ gr3_cyt
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
            font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
@@ -5787,14 +5888,14 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ gr3_cyt
            conf.int = FALSE,
            # Censor
            censor = TRUE,
-           risk.table = TRUE, risk.table.y.text = FALSE,
+           risk.table = TRUE, risk.table.y.text = TRUE,
            tables.theme = theme_survminer(#base_size = 5,
-                                          font.main = c(12, "bold", "black"),
+                                          font.main = c(14, "bold", "black"),
                                           # font.x = c(10, "bold", "black"),
                                           # font.y = c(16, "bold", "transparent"),
                                           # font.tickslab = c(19, "bold", "black")
                                           )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 risk.table.ylab <- "≥ Grade 3 \ncytopenia at D90"
 myplot$table <- myplot$table + labs(y = risk.table.ylab)
 myplot
@@ -5803,7 +5904,7 @@ myplot
 #        width = 7,
 #        height = 5)
 
-# fig_surv_cytday90 <- ggsave_workaround(myplot)
+fig_surv_cytday90 <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by gr3 cytopenia day 90 - risk table.pdf",
 #        plot = fig_surv_cytday90,
@@ -5823,10 +5924,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time (months)",
@@ -5853,10 +5954,10 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ ORR_as_
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
-           font.tickslab = c(10, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
            xlab = "Time (months)",
@@ -5870,15 +5971,15 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ ORR_as_
            censor = TRUE,
            risk.table = TRUE,
            tables.theme = theme_survminer(
-             font.main = c(10, "bold", "black")
+             font.main = c(14, "bold", "black")
            )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 myplot
 # ggsave("Survival plot by ORR as best response.pdf", 
 #        width = 7,
 #        height = 5)
 
-# fig_surv_ORR <- ggsave_workaround(myplot)
+fig_surv_ORR <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by ORR as best response - risk table.pdf",
 #        plot = fig_surv_ORR,
@@ -5898,10 +5999,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time (months)",
@@ -5927,10 +6028,10 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ gr3_cyt
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
-           font.tickslab = c(10, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
            xlab = "Time (months)",
@@ -5944,9 +6045,9 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ gr3_cyt
            censor = TRUE,
            risk.table = TRUE,
            tables.theme = theme_survminer(
-             font.main = c(12, "bold", "black")
+             font.main = c(14, "bold", "black")
            )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 risk.table.ylab <- "≥ Grade 3 \ncytopenia at D30"
 myplot$table <- myplot$table + labs(y = risk.table.ylab)
 myplot
@@ -5954,7 +6055,7 @@ myplot
 #        width = 7,
 #        height = 5)
 
-# fig_surv_cytday30 <- ggsave_workaround(myplot)
+fig_surv_cytday30 <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by gr3 cytopenia day 30 - risk table.pdf",
 #        plot = fig_surv_cytday30,
@@ -5974,10 +6075,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time (months)",
@@ -6003,10 +6104,10 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ ht_scor
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
-           font.tickslab = c(10, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
            xlab = "Time (months)",
@@ -6020,15 +6121,15 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ ht_scor
            censor = TRUE,
            risk.table = TRUE,
            tables.theme = theme_survminer(
-             font.main = c(12, "bold", "black")
+             font.main = c(14, "bold", "black")
            )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 myplot
 # ggsave("Survival plot by HTscore.pdf", 
 #        width = 7,
 #        height = 5)
 
-# fig_surv_HTscore <- ggsave_workaround(myplot)
+fig_surv_HTscore <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by HTscore - risk table.pdf",
 #        plot = fig_surv_HTscore,
@@ -6048,10 +6149,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 # 
 #            xlab = "Time (months)",
@@ -6077,10 +6178,10 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_ear
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
-           font.tickslab = c(10, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
            xlab = "Time (months)",
@@ -6094,15 +6195,15 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_ear
            censor = TRUE,
            risk.table = TRUE,
            tables.theme = theme_survminer(
-             font.main = c(12, "bold", "black")
+             font.main = c(14, "bold", "black")
            )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 myplot
 # ggsave("Survival plot by any early ICAHT.pdf", 
 #        width = 7,
 #        height = 5)
 
-# fig_surv_earlyicaht <- ggsave_workaround(myplot)
+fig_surv_earlyicaht <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by any early ICAHT - risk table.pdf",
 #        plot = fig_surv_earlyicaht,
@@ -6122,10 +6223,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 #
 #            xlab = "Time (months)",
@@ -6151,10 +6252,10 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_lat
                    data=surv_dat),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
-           font.x = c(12, "bold", "black"),
-           font.y = c(12, "bold", "black"),
-           font.legend = c(12, "black"),
-           font.tickslab = c(10, "bold", "black"),
+           font.x = c(15, "bold", "black"),
+           font.y = c(15, "bold", "black"),
+           font.legend = c(14, "black"),
+           font.tickslab = c(12, "bold", "black"),
            size = 1.5,
 
            xlab = "Time (months)",
@@ -6168,15 +6269,15 @@ myplot <- ggsurvplot(survfit(Surv(pfs_from_infusion_months, pfs_event) ~ any_lat
            censor = TRUE,
            risk.table = TRUE,
            tables.theme = theme_survminer(
-             font.main = c(12, "bold", "black")
+             font.main = c(14, "bold", "black")
            )
-) + guides(colour = guide_legend(nrow = 1))
+) %++% guides(colour = guide_legend(nrow = 1))
 myplot
 # ggsave("Survival plot by any late ICAHT.pdf", 
 #        width = 7,
 #        height = 5)
 
-# fig_surv_lateicaht <- ggsave_workaround(myplot)
+fig_surv_lateicaht <- ggsave_workaround(myplot)
 # 
 # ggsave("Survival plot by any late ICAHT - risk table.pdf",
 #        plot = fig_surv_lateicaht,
@@ -6196,10 +6297,10 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 #                    data=surv_dat),
 #            title = "OS Analysis",
 #            font.main = c(20, "bold", "black"),
-#            font.x = c(12, "bold", "black"),
-#            font.y = c(12, "bold", "black"),
-#            font.legend = c(12, "black"),
-#            font.tickslab = c(10, "bold", "black"),
+#            font.x = c(15, "bold", "black"),
+#            font.y = c(15, "bold", "black"),
+#            font.legend = c(14, "black"),
+#            font.tickslab = c(12, "bold", "black"),
 #            size = 1.5,
 #
 #            xlab = "Time (months)",
@@ -6220,18 +6321,31 @@ coxph(Surv(time = surv_dat$pfs_from_infusion_months,
 ```
 
 ```{r}
-# ggarrange(fig_surv_HTscore, fig_surv_cytday30, 
-#           fig_surv_earlyicaht, fig_surv_cytday90, 
-#           fig_surv_lateicaht, 
-#           ncol = 3, nrow = 2, 
-#           labels="AUTO")
+ggarrange(fig_surv_HTscore, fig_surv_cytday30,
+          fig_surv_earlyicaht, fig_surv_cytday90,
+          fig_surv_lateicaht,
+          ncol = 3, nrow = 2,
+          labels="AUTO")
 
-# ggsave("Survival panel.pdf", device = cairo_pdf,
-#        path = paste0(here::here(), "/cilta_cel"), 
-#        width = 14, height = 11, 
-#        units = c("in"), 
-#        dpi=600, 
-#        bg="white")
+ggsave("Survival panel_600dpi_2column_compress.tiff", #device = cairo_pdf,
+       # path = paste0(here::here(), "/cilta_cel"),
+       width = 16, height = 11,
+       # units = c("in"),
+       dpi=600, compression = "lzw",
+       bg="white")
+
+ggarrange(fig_surv_HTscore, fig_surv_cytday30,
+          fig_surv_cytday90, fig_surv_earlyicaht, 
+          fig_surv_lateicaht,
+          ncol = 3, nrow = 2,
+          labels="AUTO")
+
+ggsave("Survival panel_600dpi_2column_reordered_compress.tiff", #device = cairo_pdf,
+       # path = paste0(here::here(), "/cilta_cel"),
+       width = 16, height = 11,
+       # units = c("in"),
+       dpi=600, compression = "lzw",
+       bg="white")
 ```
 
 
