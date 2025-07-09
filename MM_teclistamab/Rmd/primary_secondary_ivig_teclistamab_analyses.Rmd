@@ -95,38 +95,6 @@ data_ <- data %>%
 data1 <- type.convert(data_, as.is = TRUE)
 ```
 
-<!-- # Data -->
-
-<!-- What we did: -->
-
-<!-- - The start date to calculate survival and days of onset is date_of_bs_ab_step_up_d1. -->
-<!-- - There was text into the variable date_of_first_bs_ab_full_dose. The text was transferred into -->
-<!-- reason_no_date_of_first_bs_ab_full_dose. -->
-<!--   Patient with text have progressed. -->
-<!-- - in_out_patient was coded "In" for patient with hospital length stay values and "Out" when no values as there is no 0 values. -->
-<!-- - is_percent_cp_cs_checked_within_30_days_before_bs_ab_initiation is to record when %CPC was checked. So it was -->
-<!-- not checked when percent_cp_cs_if_pb_checked_within_30_days_before_bs_ab_initiation was 0. -->
-<!-- The 0 were then removed from percent_cp_cs_if_pb_checked_within_30_days_before_bs_ab_initiation. -->
-<!-- Is it correct? -->
-<!-- - The patient who had a PD date at 2024-02-27 and discontinuation at the same date was marked as PD for the day 30 response. -->
-<!-- - Cytopenia is coded Yes for baseline ANC < 1.8 or baseline Hgb < 11.4 or baseline Plt < 143 and No if all the baseline values are >. -->
-<!-- - Grade 3 cytopenia is coded Yes for baseline ANC < 1 or baseline Hgb < 8 or baseline Plt < 50 and No if all the baseline values are >. -->
-<!-- - infection_severity has a "N/a" and "mild" values, they were coded as not severe.     -->
-<!-- - anc_nadir_value_during_first_6_cycles_k_u_l_ie_100_200_etc has a vale of 22.28 which seems pretty high...     -->
-<!-- - 1 patient with a viral infection is coded No for infection_n_0_y_1. Was recoded Yes. -->
-
-<!-- Issues in data with no impact for now: -->
-
-<!-- - date_of_max_ferritin has a date "20-Sep". -->
-<!-- - Difference between prior_bcma_directed_therapy_no_0_y_1 and prior_bcma_directed_therapy_yes_no. BEFORE : Looks like the yes/no is not recoded well so I am using 0/1 that I recoded myself. NOW THERE IS A DIFFERENCE IN 1 PATIENT. 27/52 vs 28/50....      -->
-<!-- - Difference between prior_cart_0_no_1_yes and Prior CART (yes/no)? The later has 0/1 values so I am using prior_cart_0_no_1_yes. -->
-<!-- - prior_auto_sct_no_0_yes_1 has a "9" value and was recoded as NA. -->
-<!-- - Most recent BCMA agent name (Carvylti should be Carvykti) -->
-
-<!-- Question for analysis: -->
-
-<!-- - For treatment_delays_during_first_cycle_infection_1_cytoepnias_2_crs_3_icans_4_other_5_explain_leave_blank_if_no_delays, -->
-<!-- should I combine "CRS and Infection" and "Infection and CRS"? others? or is there a time order to consider? -->
 
 
 ```{r temp_fix}
@@ -1367,7 +1335,7 @@ bsab_data %>%
          icu_admission_during_first_cycle_n_0_y_1, days_of_icu_admission,
          in_out_patient
          ) %>%
-  tbl_summary(by = ivig_n_0_y_1,
+  tbl_summary(by = ivig_cat,
               type = list(days_of_icu_admission ~ "continuous",
                           ecog_ps_at_bs_ab_initiation_0_5 ~ "categorical",
                           all_dichotomous() ~ "categorical"),
@@ -1398,8 +1366,8 @@ bsab_data %>%
          baseline_pl_ts, plt_nadir_value_during_first_6_cycles, 
          cytopenia_baseline, gr3_cytopenia_baseline,
          baseline_alc_k_u_l_ie_100_200_etc, alc_day_8, alc_day_15, alc_day_22, alc_c2d1, 
-         ivig_n_0_y_1) %>%
-  tbl_summary(by = ivig_n_0_y_1,
+         ivig_cat) %>%
+  tbl_summary(by = ivig_cat,
               type = list(
                 c(percent_cp_cs_if_pb_checked_within_30_days_before_bs_ab_initiation) ~ "continuous",
                 all_dichotomous() ~ "categorical"),
@@ -1430,8 +1398,8 @@ bsab_data %>%
          # ivig_n_0_y_1,
          need_for_gcsf, need_for_tpo_agonist, 
          
-         ivig_n_0_y_1) %>%
-  tbl_summary(by = ivig_n_0_y_1,
+         ivig_cat) %>%
+  tbl_summary(by = ivig_cat,
               type = list(
                 c(duration_of_crs_days, duration_of_icans_days,
                   day_of_onset_crs_relative_to_initiation,
@@ -1460,7 +1428,7 @@ long_infection_data <- bsab_data %>%
          infection_type_2, infection_severity_2nd,
          infection_type_3, infection_severity_3rd,
          infection_type_4, infection_severity_4th,
-         ivig_n_0_y_1) %>%
+         ivig_cat) %>%
   mutate(pathogen_count = sapply(strsplit(pathogen, ","), length)) %>% 
   separate_wider_delim(cols = pathogen, delim = ", ",
                        names = c(paste("pathogen_", 1:max(.$pathogen_count), sep = "")), 
@@ -1473,7 +1441,7 @@ long_infection_data <- bsab_data %>%
   #   "bacterial_viral_fungal|_severe_hospitalization_or_requiring_iv_antibiotics") %>%
   #     str_replace(., "number_", "type_")) %>%
   pivot_longer(cols = -c(pt_identifier, #date_of_bs_ab_step_up_d1,
-                         ivig_n_0_y_1, time_from_bsab_therapy_to_1st_infection_days,
+                         ivig_cat, time_from_bsab_therapy_to_1st_infection_days,
                          infection_n_0_y_1#, number_of_infections
                          ),
                names_pattern = "(pathogen_|infection_type_|infection_severity_)(1|2|3|4).*",
@@ -1507,7 +1475,7 @@ long_infection_data %>%
   select(-sequence, -pathogen_) %>%
   distinct() %>%
   group_by(pt_identifier, time_from_bsab_therapy_to_1st_infection_days,
-           ivig_n_0_y_1,
+           ivig_cat,
            total_number_of_infection, any_severe_infection,
            any_infection) %>%
   
@@ -1529,9 +1497,9 @@ long_infection_data %>%
          time_from_bsab_therapy_to_1st_infection_days,
          total_number_of_infection,
          infection_type,
-         ivig_n_0_y_1) %>%
+         ivig_cat) %>%
 
-  tbl_summary(by = ivig_n_0_y_1,
+  tbl_summary(by = ivig_cat,
               label = list(any_severe_infection = "Any severe infection",
                            total_number_of_infection = "Total number of infections",
                            infection_type = "Infection type"),
@@ -1600,8 +1568,8 @@ bsab_data %>%
          # best_response_mrd_flow_positive_vs_negative, 
          # best_response_mrd_clonoseq_positive_vs_negative,
          best_MRD_response, best_response_CR_MRD,
-         ivig_n_0_y_1) %>%
-  tbl_summary(by = ivig_n_0_y_1,
+         ivig_cat) %>%
+  tbl_summary(by = ivig_cat,
               type = list(all_dichotomous() ~ "categorical"),
               statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1
@@ -1617,8 +1585,8 @@ bsab_data %>%
   select(progression_yes_no, pfs_from_initiation_months, #pfs_event, 
          death_yes_no, #os_event, 
          os_from_initiation_months, 
-         ivig_n_0_y_1) %>%
-  tbl_summary(by = ivig_n_0_y_1,
+         ivig_cat) %>%
+  tbl_summary(by = ivig_cat,
               type = list(all_dichotomous() ~ "categorical"),
               statistic = list(all_continuous() ~ "{median} ({min}, {max})"), 
               digits = all_continuous() ~ 1
@@ -1638,19 +1606,19 @@ bsab_data %>%
 Median OS
 ```{r}
 survfit(Surv(os_from_initiation_months, os_event) ~ 1, data = bsab_data)
-survfit(Surv(os_from_initiation_months, os_event) ~ ivig_n_0_y_1, data = bsab_data)
+survfit(Surv(os_from_initiation_months, os_event) ~ ivig_cat, data = bsab_data)
 ```
 
 x-month survival probability
 ```{r}
 summary(survfit(Surv(os_from_initiation_months, os_event) ~ 1, data = bsab_data), times = c(3,6,9,12))
 
-summary(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_n_0_y_1, data = bsab_data), times = c(3,6,9,12))
+summary(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_cat, data = bsab_data), times = c(3,6,9,12))
 ```
 
 
-```{r Survival analysis - KM by ivig_n_0_y_1}
-ggsurvplot(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_n_0_y_1, 
+```{r Survival analysis - KM by ivig_cat}
+ggsurvplot(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_cat, 
                    data = bsab_data),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
@@ -1663,7 +1631,7 @@ ggsurvplot(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_n_0_y_1,
            xlab = "Time (months)",
            ylab = "OS (probability)",
            legend = "top",
-           legend.title = "IVIG", legend.labs = c("No", "Yes"),
+           legend.title = "IVIG", legend.labs = c("No IVIG", "Primary", "Secondary"),
            pval = TRUE,
            conf.int = FALSE,
            # Censor
@@ -1678,7 +1646,7 @@ ggsurvplot(survfit(Surv(os_from_initiation_months, os_event) ~ ivig_n_0_y_1,
 ) %++% guides(colour = guide_legend(nrow = 1))
 
 coxph(Surv(time = bsab_data$os_from_initiation_months, 
-                   event = bsab_data$os_event) ~ ivig_n_0_y_1, 
+                   event = bsab_data$os_event) ~ ivig_cat, 
               data = bsab_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -1696,11 +1664,11 @@ x-month PFS probability
 ```{r}
 summary(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ 1, data = bsab_data), times = c(3,6,9,12))
 
-summary(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_n_0_y_1, data = bsab_data), times = c(3,6,9,12))
+summary(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_cat, data = bsab_data), times = c(3,6,9,12))
 ```
 
-```{r PFS analysis - KM by ivig_n_0_y_1}
-ggsurvplot(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_n_0_y_1, 
+```{r PFS analysis - KM by ivig_cat}
+ggsurvplot(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_cat, 
                    data = bsab_data),
            # title = "PFS Analysis",
            font.main = c(20, "bold", "black"),
@@ -1713,7 +1681,7 @@ ggsurvplot(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_n_0_y_1,
            xlab = "Time (months)",
            ylab = "PSS (probability)",
            legend = "top",
-           legend.title = "IVIG", legend.labs = c("No", "Yes"),
+           legend.title = "IVIG", legend.labs = c("No IVIG", "Primary", "Secondary"),
            pval = TRUE,
            conf.int = FALSE,
            # Censor
@@ -1728,7 +1696,7 @@ ggsurvplot(survfit(Surv(pfs_from_initiation_months, pfs_event) ~ ivig_n_0_y_1,
 ) %++% guides(colour = guide_legend(nrow = 1))
 
 coxph(Surv(time = bsab_data$pfs_from_initiation_months, 
-                   event = bsab_data$pfs_event) ~ ivig_n_0_y_1, 
+                   event = bsab_data$pfs_event) ~ ivig_cat, 
               data = bsab_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
@@ -1738,14 +1706,14 @@ coxph(Surv(time = bsab_data$pfs_from_initiation_months,
 # HR
 ```{r}
 coxph(Surv(time = bsab_data$os_from_initiation_months, 
-                   event = bsab_data$os_event) ~ ivig_n_0_y_1 + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1, 
+                   event = bsab_data$os_event) ~ ivig_cat + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1, 
               data = bsab_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>% 
   modify_spanning_header(everything() ~ "**OS**") %>% as_gt()
 
-# glm(os_event ~ ivig_n_0_y_1 + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1,
+# glm(os_event ~ ivig_cat + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1,
 #     data = bsab_data,
 #     family = "binomial") %>%
 #   tbl_regression(exponentiate = TRUE, 
@@ -1754,15 +1722,16 @@ coxph(Surv(time = bsab_data$os_from_initiation_months,
 #   modify_spanning_header(everything() ~ "**OS**") %>%
 #   bold_p(t = .05)
 
+
 coxph(Surv(time = bsab_data$pfs_from_initiation_months, 
-                   event = bsab_data$pfs_event) ~ ivig_n_0_y_1 + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1, 
+                   event = bsab_data$pfs_event) ~ ivig_cat + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1, 
               data = bsab_data)  %>% 
   tbl_regression(exponentiate = TRUE) %>% 
   bold_p(t = .05) %>% 
   add_nevent(location = "level") %>% add_n(location = "level") %>% 
   modify_spanning_header(everything() ~ "**PFS**") %>% as_gt()
 
-# glm(pfs_event ~ ivig_n_0_y_1 + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1,
+# glm(pfs_event ~ ivig_cat + cytogenetics + high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation_n_0_y_1,
 #     data = bsab_data,
 #     family = "binomial") %>%
 #   tbl_regression(exponentiate = TRUE, 
