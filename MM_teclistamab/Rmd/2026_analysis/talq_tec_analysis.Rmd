@@ -92,6 +92,19 @@ data <- data %>%
            if_inpatient_length_of_hospital_stay_total_days_including_all_admissions_0_if_done_outpt_with_no_admissions
          ) %>% 
   `colnames<-`(str_remove_all(colnames(.), "_bacterial_viral_fungal"))
+
+stage <- 
+  readxl::read_xlsx(
+    paste0(#path, 
+      here::here(), "/data/2026_analysis",
+      "/Stage_Weightloss_PHI.xlsx"), 
+    sheet = "Stage_Weight",
+    na = c("NA")
+  ) %>% 
+  janitor::clean_names() |> 
+  select(mrn, patient_identifier, contains("weight"), 
+         ldh_elevated_at_index, contains("iss"), 
+         -weight_at_initiation_of_bs_ab_kg)
 ```
 
 ```{r exploratory function}
@@ -113,8 +126,86 @@ data <- data %>%
 # check_data(data[4:178])
 ```
 
+```{r}
+data_check <- 
+  data |> select(mrn, patient_identifier,
+                 bs_ab_name_tec_1_tal_2_elra_3_linvo_4, 
+                 date_of_last_exposure_to_prior_bcma_agent, prior_gprc5d_yes_no, prior_cart_0_no_1_yes, 
+                 most_recent_bcma_agent_name, if_prior_cart_which_one_s, 
+                 if_prior_adc_which_one_s, if_so_what_combinational_agent_s_given_with_bs_ab,
+                 date_of_last_gprc5d_exposure, date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date,
+                 date_of_bs_ab_step_up_d1) |> 
+  mutate(mrn = as.character(mrn)) |> 
+  arrange(mrn, date_of_bs_ab_step_up_d1) |> 
+  group_by(mrn) |> 
+  mutate(duplicated_ids = case_when(
+    n() == 2           ~ "Yes",
+    TRUE               ~ "No"
+  )) |> 
+  mutate(which_first = row_number()) |> 
+  ungroup() |> 
+  mutate(bs_ab_name_tec_1_tal_2_elra_3_linvo_4 = case_when(
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == 1          ~ "Teclistamab",
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == 2          ~ "Talquetamab",
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == 3          ~ "Elra",
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == 4          ~ "Linvo",
+    TRUE                                                ~ NA_character_
+  )) |> 
+  mutate(time_last_gprc5d_to_initiation_days = 
+           interval(
+             start = date_of_last_gprc5d_exposure,
+             end = date_of_bs_ab_step_up_d1)/
+           duration(n=1, units = "days"),
+         .after = date_of_last_gprc5d_exposure) %>%
+  mutate(time_most_recent_bcma_to_initiation_days = 
+           interval(
+             start = date_of_last_exposure_to_prior_bcma_agent,
+             end = date_of_bs_ab_step_up_d1)/
+           duration(n=1, units = "days"),
+         .after = date_of_last_exposure_to_prior_bcma_agent) %>%
+  mutate(date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date = case_when(
+    date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date == 0       ~ NA_real_,
+    TRUE                 ~ date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date
+  )) |> 
+  mutate(date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date = 
+           as.Date(as.numeric(date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date), 
+                          # tryFormats = c("%m/%d/%y", "%m/%d/%Y"), 
+                          origin = "1899-12-30"))
+
+data_check |> 
+  filter(duplicated_ids == "Yes") |> #select(mrn) |> unique() |> as.vector()
+  select(mrn, bs_ab_name_tec_1_tal_2_elra_3_linvo_4, which_first) |> 
+  tbl_summary(by = bs_ab_name_tec_1_tal_2_elra_3_linvo_4,
+              statistic = list(c(all_continuous()) ~ c(
+                "{median} ({min}, {max})")))
+
+a <- data_check |> 
+  filter(time_most_recent_bcma_to_initiation_days < 0 |
+           time_last_gprc5d_to_initiation_days < 0) |> 
+  select(bs_ab_name_tec_1_tal_2_elra_3_linvo_4, 
+         mrn, patient_identifier,
+         time_most_recent_bcma_to_initiation_days,
+         date_of_bs_ab_step_up_d1,
+         date_of_last_exposure_to_prior_bcma_agent, 
+         date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date,
+         
+         
+         time_last_gprc5d_to_initiation_days,
+         date_of_last_gprc5d_exposure,
+         prior_gprc5d_yes_no, prior_cart_0_no_1_yes, 
+         most_recent_bcma_agent_name, if_prior_cart_which_one_s, 
+         if_prior_adc_which_one_s, if_so_what_combinational_agent_s_given_with_bs_ab,
+  )
+  
+  
+```
+
+
+
+
 ```{r fix name date and recode 012etc}
 data1 <- data %>% 
+  full_join(., stage, by = c("mrn", "patient_identifier")) |> 
   # General----
   mutate(mrn = as.character(mrn)) |> 
   # Fix letter case and missing
@@ -207,6 +298,10 @@ data1 <- data %>%
   #   !is.na(date_of_disocntinuation_if_cotinues_enter_0)  ~ "Discontinued"
   # ), .after = ) %>%
   # Dates
+  mutate(date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date = case_when(
+    date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date == 0       ~ NA_real_,
+    TRUE                 ~ date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date
+  )) |> 
   mutate(across(c(#"date_of_mm_diagnosis",
                   # "date_of_bs_ab_step_up_d1",
                   "date_of_first_bs_ab_full_dose",
@@ -323,13 +418,54 @@ data2 <- data1 %>%
                                              ">109")),
   .after = weight_at_initiation_of_bs_ab_kg
   ) %>%
+  mutate(cohort_n = nrow(.)) |> 
+  # weight loss 30days
+  mutate(weight_change_30days_num = weight_30_days_kg - weight_at_initiation_of_bs_ab_kg) |>
+  mutate(percentage_weight_loss_from_baseline_30days = ((weight_at_initiation_of_bs_ab_kg - weight_30_days_kg) / 
+                                                          weight_at_initiation_of_bs_ab_kg) * 100
+  ) %>%
+  mutate(percentage1_weight_loss_from_baseline_30days = sum(percentage_weight_loss_from_baseline_30days >= 1, na.rm = TRUE)) |> 
+  mutate(cohort_percentage1_weight_loss_from_baseline_30days = (percentage1_weight_loss_from_baseline_30days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage3_weight_loss_from_baseline_30days = sum(percentage_weight_loss_from_baseline_30days >= 3, na.rm = TRUE)) |> 
+  mutate(cohort_percentage3_weight_loss_from_baseline_30days = (percentage3_weight_loss_from_baseline_30days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage5_weight_loss_from_baseline_30days = sum(percentage_weight_loss_from_baseline_30days >= 5, na.rm = TRUE)) |> 
+  mutate(cohort_percentage5_weight_loss_from_baseline_30days = (percentage5_weight_loss_from_baseline_30days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage10_weight_loss_from_baseline_30days = sum(percentage_weight_loss_from_baseline_30days >= 10, na.rm = TRUE)) |> 
+  mutate(cohort_percentage10_weight_loss_from_baseline_30days = (percentage10_weight_loss_from_baseline_30days /
+                                                                  cohort_n) * 100) |> 
+  # weight loss 90days
+  mutate(weight_change_90days_num = weight_90_days_kg - weight_at_initiation_of_bs_ab_kg) |>
+  mutate(percentage_weight_loss_from_baseline_90days = ((weight_at_initiation_of_bs_ab_kg - weight_90_days_kg) / 
+                                                          weight_at_initiation_of_bs_ab_kg) * 100
+  ) %>%
+  mutate(percentage1_weight_loss_from_baseline_90days = sum(percentage_weight_loss_from_baseline_90days >= 1, na.rm = TRUE)) |> 
+  mutate(cohort_percentage1_weight_loss_from_baseline_90days = (percentage1_weight_loss_from_baseline_90days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage3_weight_loss_from_baseline_90days = sum(percentage_weight_loss_from_baseline_90days >= 3, na.rm = TRUE)) |> 
+  mutate(cohort_percentage3_weight_loss_from_baseline_90days = (percentage3_weight_loss_from_baseline_90days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage5_weight_loss_from_baseline_90days = sum(percentage_weight_loss_from_baseline_90days >= 5, na.rm = TRUE)) |> 
+  mutate(cohort_percentage5_weight_loss_from_baseline_90days = (percentage5_weight_loss_from_baseline_90days /
+                                                                  cohort_n) * 100) |> 
+  mutate(percentage10_weight_loss_from_baseline_90days = sum(percentage_weight_loss_from_baseline_90days >= 10, na.rm = TRUE)) |> 
+  mutate(cohort_percentage10_weight_loss_from_baseline_90days = (percentage10_weight_loss_from_baseline_90days /
+                                                                  cohort_n) * 100) |> 
+  
+  
+    
+  
+  
   # Myeloma
   rename(true_emd_prior_bsab_type = just_prior_to_bs_ab_initiation_is_there_true_emd_0_none_1_paraskeletal_only_2_true_emd_paraskeletal) |> 
   mutate(true_emd_prior_bsab_type = case_when(
-    true_emd_prior_bsab_type == 0        ~ "None",
-    true_emd_prior_bsab_type == 1        ~ "Paraskeletal only",
-    true_emd_prior_bsab_type == 2        ~ "True EMD (+/-paraskeletal)",
-    TRUE                                      ~ as.character(true_emd_prior_bsab_type)
+    true_emd_prior_bsab_type == 0                                ~ "None",
+    true_emd_prior_bsab_type == 1                                ~ "Paraskeletal only",
+    true_emd_prior_bsab_type == 2                                ~ "True EMD (+/-paraskeletal)",
+    true_emd_prior_bsab_type == 3                                ~ "True EMD (+/-paraskeletal)",
+    TRUE                                                         ~ as.character(true_emd_prior_bsab_type)
   )) %>%
   mutate(true_emd_prior_bsab = case_when(
     true_emd_prior_bsab_type == "True EMD (+/-paraskeletal)"     ~ "Yes",
@@ -405,7 +541,19 @@ data3 <- data2 %>%
     number_of_prior_lines_of_therapy_before_bs_ab > 4                         ~ "> 4"
   ), .after = number_of_prior_lines_of_therapy_before_bs_ab) %>%  
   # Refractory status ----
-  mutate_at(c("bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2",
+  mutate(across(c("bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
+              "daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2"
+  ),
+  ~ case_when(
+    . == 0                                              ~ "Exposed",
+    . == 1                                              ~ "Exposed",
+    . == 2                                              ~ "Not exposed",
+    TRUE                                                ~ NA_character_
+  ), .names = "{str_remove(.col, '_exposed_0_vs_refractory_1_vs_naive_2')}_exposed")) %>%
+  mutate(across(c("bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2",
               "carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2",
               "lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
               "pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2",
@@ -416,40 +564,57 @@ data3 <- data2 %>%
     . == 1                                              ~ "Refractory",
     . == 2                                              ~ "Not refractory",
     TRUE                                                ~ NA_character_
-  )) %>%
+  ), .names = "{str_remove(.col, '_exposed_0_vs_refractory_1_vs_naive_2')}_refractory")) %>%
+  
   mutate(immuno = case_when(
-    lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" |
-      pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"           ~ "Yes",
-    lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 != "Refractory" |
-      pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 != "Refractory"           ~ "No"
-  ), .after = pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2) %>% 
+    lenalidomide_status_refractory == "Refractory" |
+      pomalidomide_status_refractory == "Refractory"           ~ "Yes",
+    lenalidomide_status_refractory != "Refractory" |
+      pomalidomide_status_refractory != "Refractory"           ~ "No"
+  ), .after = pomalidomide_status_refractory) %>% 
   mutate(proteasome = case_when(
-    bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" |
-      carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"            ~ "Yes",
-    bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 != "Refractory" |
-      carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 != "Refractory"            ~ "No"
+    bortezomib_status_refractory == "Refractory" |
+      carfilzomib_status_refractory == "Refractory"            ~ "Yes",
+    bortezomib_status_refractory != "Refractory" |
+      carfilzomib_status_refractory != "Refractory"            ~ "No"
   ), .after = immuno) %>%
   mutate(dara = case_when(
-    daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory"            ~ "Yes",
-    is.na(daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2)            ~ NA_character_,
+    daratumumab_or_isatuximab_status_refractory == "Refractory"            ~ "Yes",
+    is.na(daratumumab_or_isatuximab_status_refractory)            ~ NA_character_,
     TRUE                                                           ~ "No"
-  ), .after = daratumumab_or_isatuximab_status_exposed_0_vs_refractory_1_vs_naive_2) %>%
+  ), .after = daratumumab_or_isatuximab_status_refractory) %>%
   mutate(doubleref = case_when(
     proteasome == "Yes" &
       immuno == "Yes"                                              ~ "Yes",
     TRUE                                                           ~ "No"
   ), .after = proteasome) %>%
+  mutate(tripleexp = case_when(
+    (bortezomib_status_exposed == "Exposed" |
+      carfilzomib_status_exposed == "Exposed") &
+      (lenalidomide_status_exposed == "Exposed" |
+      pomalidomide_status_exposed == "Exposed") &
+      daratumumab_or_isatuximab_status_exposed == "Exposed"     ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
   mutate(tripleref = case_when(
     proteasome == "Yes" &
       immuno == "Yes" &
-      dara == "Yes"          ~ "Yes",
+      dara == "Yes"                                                ~ "Yes",
+    TRUE                                                           ~ "No"
+  )) %>% 
+  mutate(pentaexp = case_when(
+    bortezomib_status_exposed == "Exposed" &
+      carfilzomib_status_exposed == "Exposed" &
+      lenalidomide_status_exposed == "Exposed" &
+      pomalidomide_status_exposed == "Exposed" &
+      daratumumab_or_isatuximab_status_exposed == "Exposed"     ~ "Yes",
     TRUE                                                           ~ "No"
   )) %>% 
   mutate(pentaref = case_when(
-    bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
-      carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" &
-      lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
-      pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 == "Refractory" & 
+    bortezomib_status_refractory == "Refractory" & 
+      carfilzomib_status_refractory == "Refractory" &
+      lenalidomide_status_refractory == "Refractory" & 
+      pomalidomide_status_refractory == "Refractory" & 
       dara == "Yes"          ~ "Yes",
     TRUE                                                           ~ "No"
   )) |> 
@@ -457,6 +622,17 @@ data3 <- data2 %>%
     type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 1    ~ "ADC",
     type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 2    ~ "CART",
     type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 == 3    ~ "BsAb"
+  )) |> 
+  mutate(most_recent_bcma_agent_name = case_when(
+    most_recent_bcma_agent_name == "Abecma"                     ~ "Ide-cel",
+    most_recent_bcma_agent_name == "Carvykti"                   ~ "Cilta-cel",
+    most_recent_bcma_agent_name == "Carvylti"                   ~ "Cilta-cel",
+  )) |> 
+  mutate(if_prior_cart_which_one_s = case_when(
+    if_prior_cart_which_one_s == "Abecma"                       ~ "Ide-cel",
+    if_prior_cart_which_one_s == "Abcema"                      ~ "Ide-cel",
+    if_prior_cart_which_one_s == "Carvykti"                     ~ "Cilta-cel",
+    if_prior_cart_which_one_s == "Carvylti"                     ~ "Cilta-cel",
   )) |> 
   mutate(time_most_recent_bcma_to_initiation_days = 
            interval(
@@ -537,10 +713,37 @@ for (i in vec_col) {
   }
 }
 data4 <- data4 |> 
-  mutate(hypogammaglobulinemia = case_when(
+  mutate(baseline_hypogammaglobulinemia = case_when(
     baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l < 400            ~ "<400",
     baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l >= 400           ~ "≥400"
+  )) |> 
+  mutate(baseline_anemia = case_when(
+    baseline_hgb < 11.4                                         ~ "Yes",
+    is.na(baseline_hgb)                                         ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) |> 
+  mutate(baseline_crcl30 = case_when(
+    baseline_cr_cl_m_l_min < 30                                 ~ "<30",
+    is.na(baseline_cr_cl_m_l_min)                               ~ NA_character_,
+    TRUE                                                        ~ "≥30"
+  )) |> 
+  mutate(baseline_crcl40 = case_when(
+    baseline_cr_cl_m_l_min < 40                                 ~ "<40",
+    is.na(baseline_cr_cl_m_l_min)                               ~ NA_character_,
+    TRUE                                                        ~ "≥40"
+  )) |> 
+  mutate(baseline_neutropenia = case_when(
+    baseline_anc_k_u_l_ie_100_200_etc < 1.8                     ~ "Yes",
+    is.na(baseline_anc_k_u_l_ie_100_200_etc)                    ~ NA_character_,
+    TRUE                                                        ~ "No"
+  )) |> 
+  mutate(eligible_for_tec_trial = case_when(
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == "Teclistamab"      ~ eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1
+  )) |> 
+  mutate(eligible_for_talq_trial = case_when(
+    bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == "Talquetamab"      ~ eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1
   ))
+  
 
 ```
 
@@ -701,6 +904,18 @@ data5 <- data4 %>%
   mutate(ivig_given_regardless_of_ig_g_levels_0_or_ivig_given_in_response_to_low_ig_g_levels_1 = case_when(
     ivig_given_regardless_of_ig_g_levels_0_or_ivig_given_in_response_to_low_ig_g_levels_1 == 0      ~ "given_regardless_of_ig_g_levels",
     ivig_given_regardless_of_ig_g_levels_0_or_ivig_given_in_response_to_low_ig_g_levels_1 == 1      ~ "given_in_response_to_low_ig_g_levels"
+  )) |> 
+  mutate(oral_toxicity = case_when(
+    !is.na(oral_toxicities_e_g_dysgeusia_if_so_describe) ~ "Yes",
+    TRUE                                             ~ "No"
+  )) |> 
+  mutate(nail_toxicity = case_when(
+    !is.na(nail_toxicities_if_so_describe)           ~ "Yes",
+    TRUE                                             ~ "No"
+  )) |> 
+  mutate(skin_toxicity = case_when(
+    !is.na(skin_toxicities_if_so_describe)           ~ "Yes",
+    TRUE                                             ~ "No"
   ))
 
 
@@ -766,8 +981,10 @@ data6 <- data5 %>%
     reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain == 5        ~ "Other",
     TRUE                                      ~ reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain
   )) %>%
-
-
+  mutate(time_from_bsab_to_discontinuation =
+           interval(start = date_of_bs_ab_step_up_d1, end = date_of_discontinuation_if_continues_enter_0_bs_ab_stop_date) /
+           duration(n =1, unit = "months")
+  ) %>%
 
   mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = str_replace(
     cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain,
@@ -1147,90 +1364,12 @@ data7 <- data6 %>%
 ```
 
 
-
-
-
 ```{r infection}
-
-
-
-
-
-
-
-data8 <- data7 %>%
-  # Fix - Remove data for a patient "The positive VRE surveillance screen consistent with colonization only"
-  mutate(number_of_infections = case_when(
-    infection_n_0_y_1 == "No" &
-      number_of_infections > 0                          ~ 0,
-    TRUE                                                ~ number_of_infections
-  # ), number_of_infections = case_when(
-  #   number_of_infections == 0                           ~ NA_real_,
-  #   TRUE                                                ~ number_of_infections
-  )) |> 
-  mutate(infection_severity_1 = case_when(
-    infection_n_0_y_1 == "No" &
-      !is.na(infection_severity_1)                      ~ NA_character_,
-    TRUE                                                ~ infection_severity_1
-  )) |> 
-  mutate(infection_type_1 = case_when(
-    infection_n_0_y_1 == "No" &
-      !is.na(infection_type_1)                          ~ NA_character_,
-    TRUE                                                ~ infection_type_1
-  )) |> 
+data8 <- data7 |> 
+  # Add data we requested to fill the blank on 4 patients
+  # select(mrn, patient_identifier, date_of_bs_ab_step_up_d1, pathogen, number_of_infections, infection_n_0_y_1,
+  #        starts_with("infection_type_"), starts_with("date_of_infection_"), starts_with("infection_severity_")) |>
   mutate(date_of_infection_1 = case_when(
-    infection_n_0_y_1 == "No" &
-      !is.na(date_of_infection_1)                       ~ NA_Date_,
-    TRUE                                                ~ date_of_infection_1
-  )) |> 
-  mutate(pathogen = case_when(
-    infection_n_0_y_1 == "No" &
-      !is.na(pathogen)                                  ~ NA_character_,
-    TRUE                                                ~ pathogen
-  )) |> 
-  # Missing 0 when no infection
-  mutate(number_of_infections = case_when(
-    !is.na(number_of_infections)                        ~ number_of_infections,
-    is.na(number_of_infections) &
-      infection_n_0_y_1 == "No"                         ~ 0,
-  ))
-  
-  
-  
-  
-  # Infection - fix data
-  mutate(infection_severity_2 = case_when(
-    date_of_infection_2 == date_of_bs_ab_step_up_d1     ~ infection_severity_3,
-    TRUE                                                ~ infection_severity_2
-  )) |> 
-  mutate(infection_type_2 = case_when(
-    date_of_infection_2 == date_of_bs_ab_step_up_d1     ~ infection_type_3,
-    TRUE                                                ~ infection_type_2
-  )) |> 
-  mutate(date_of_infection_2 = case_when(
-    date_of_infection_2 == date_of_bs_ab_step_up_d1     ~ date_of_infection_3,
-    TRUE                                                ~ date_of_infection_2
-  )) |> 
-  mutate(infection_severity_1 = case_when(
-    date_of_infection_1 == date_of_bs_ab_step_up_d1     ~ infection_severity_2,
-    TRUE                                                ~ infection_severity_1
-  ), infection_severity_1 = case_when(
-    infection_severity_1 == "moderate"                  ~ "No",
-    TRUE                                                ~ infection_severity_1
-  )) |> 
-  mutate(infection_type_1 = case_when(
-    date_of_infection_1 == date_of_bs_ab_step_up_d1     ~ infection_type_2,
-    TRUE                                                ~ infection_type_1
-  )) |> 
-  mutate(date_of_infection_1 = case_when(
-    date_of_infection_1 == date_of_bs_ab_step_up_d1     ~ date_of_infection_2,
-    TRUE                                                ~ date_of_infection_1
-  )) |> 
-  
-  
-  mutate(date_of_infection_1 = case_when(
-    infection_n_0_y_1 == "No" &
-      !is.na(date_of_infection_1)                       ~ NA_Date_,
     infection_n_0_y_1 == "Yes" &
       is.na(date_of_infection_1) &
       infection_type_1 == "Bacterial"                   ~ as.Date("2023-3-15"),
@@ -1242,143 +1381,176 @@ data8 <- data7 %>%
       infection_type_1 == "Viral"                       ~ as.Date("2026-2-12"),
     TRUE                                                ~ date_of_infection_1
   )) |> 
-  mutate(time_from_bsab_therapy_to_1st_infection_days = 
-           interval(
-             start = date_of_bs_ab_step_up_d1, 
-             end = date_of_infection_1)/
-           duration(n=1, units = "days"),
-     .after = date_of_infection_1) %>%
-  mutate(time_from_bsab_therapy_to_1st_infection_months = 
-           interval(
-             start = date_of_bs_ab_step_up_d1, 
-             end = date_of_infection_1)/
-           duration(n=1, units = "months"),
-     .after = date_of_infection_1) |> 
-  # rename(any_infection = infection_n_0_y_1) %>%
-  mutate(any_infection = case_when(
-    infection_n_0_y_1 == 2                              ~ "Yes",
-    TRUE                                                ~ infection_n_0_y_1
+  mutate(infection_severity_1 = case_when(
+    !is.na(infection_severity_1)                        ~ infection_severity_1,
+    infection_n_0_y_1 == "Yes" &
+      is.na(date_of_infection_1)                        ~ "No"
   )) |> 
-  mutate(any_sevinfection = case_when(
-    if_any(any_of(contains("infection_severity")), ~ . == "Yes")  ~ "Yes",
-    if_any(any_of(contains("infection_severity")), ~ !is.na(.))   ~ "No"
-  )) #|> 
-  # select(mrn, any_infection, contains("infection"))
-  
-  
-  
-  
-  # mutate(time_from_bsab_therapy_to_1st_infection_days_d30 = case_when(
-  #   time_from_bsab_therapy_to_1st_infection_days <= 30  ~ time_from_bsab_therapy_to_1st_infection_days
-  # )) 
-
-
-a <- data8 |> select(mrn, patient_identifier,
-                     date_of_bs_ab_step_up_d1, pathogen, number_of_infections, infection_n_0_y_1,
-         starts_with("infection_type_"), starts_with("date_of_infection_"), starts_with("infection_severity_"))
-
-
+  mutate(infection_type_1 = case_when(
+    !is.na(infection_type_1)                            ~ infection_type_1,
+    infection_n_0_y_1 == "Yes" &
+      is.na(date_of_infection_1)                        ~ "Viral"
+  )) |> 
+  mutate(date_of_infection_1 = case_when(
+    !is.na(date_of_infection_1)                         ~ date_of_infection_1,
+    infection_n_0_y_1 == "Yes" &
+      is.na(date_of_infection_1)                        ~ as.Date("2023-7-15")
+  ))
 
 bsab_inf <-
   data8 |> 
-  select(mrn, date_of_bs_ab_step_up_d1, pathogen, number_of_infections, infection_n_0_y_1,
+  select(mrn, patient_identifier, date_of_bs_ab_step_up_d1, pathogen, number_of_infections, infection_n_0_y_1,
          starts_with("infection_type_"), starts_with("date_of_infection_"), starts_with("infection_severity_")) |> 
+  # Fix unknown pathogen before pivot
   mutate(pathogen = str_replace(pathogen, "^,", "empty,")) |> 
+  mutate(pathogen = str_replace(pathogen, ",$", ", empty")) |> 
   mutate(pathogen = str_replace_na(pathogen, "empty")) |> 
   mutate(pathogen_count = sapply(strsplit(pathogen, ","), length), .after = pathogen) %>% 
+  # Separate pathogen to have same format as infection severity, dates etc
   separate_wider_delim(cols = pathogen, delim = ", ",
                        names = c(paste("pathogen", 1:max(.$pathogen_count), sep = "_")), 
                        too_few = "align_start", too_many = "merge", 
                        cols_remove = TRUE) |> 
-  pivot_longer(cols = -c(mrn, date_of_bs_ab_step_up_d1, number_of_infections, infection_n_0_y_1), 
+  pivot_longer(cols = -c(mrn, patient_identifier, date_of_bs_ab_step_up_d1, number_of_infections, infection_n_0_y_1), 
                names_pattern = "(date_of_infection|infection_type|infection_severity|pathogen)(_1|_2|_3|_4).*",
                names_to = c(".value", "sequence"), 
                values_drop_na = TRUE) |> 
+  mutate(infection_n_0_y_1 = case_when(
+    infection_n_0_y_1 == 2                              ~ "Yes",
+    TRUE                                                ~ infection_n_0_y_1
+  )) |> 
+  # Fix - Remove data for a patient "The positive VRE surveillance screen consistent with colonization only"
+  mutate(across(c("infection_type", 
+                  "infection_severity"), 
+                ~ case_when(
+    infection_n_0_y_1 == "No" &
+      number_of_infections > 0                          ~ NA_character_,
+    TRUE                                                ~ as.character(.)
+  ))) |> 
+  mutate(date_of_infection = case_when(
+    infection_n_0_y_1 == "No" &
+      number_of_infections > 0                          ~ NA_Date_,
+    TRUE                                                ~ date_of_infection
+  )) |> 
+  mutate(pathogen = case_when(
+    infection_n_0_y_1 == "No" &
+      number_of_infections > 0                          ~ "empty",
+    TRUE                                                ~ pathogen
+  )) |> 
+  # Moderate infection is not severe
+  mutate(infection_severity = case_when(
+    infection_severity == "Moderate"                    ~ "No",
+    TRUE                                                ~ infection_severity
+  )) |> 
   # 4 patients (5 dates) are identical as date of bsab - exclude
   mutate(infection_severity = case_when(
     date_of_infection == date_of_bs_ab_step_up_d1       ~ "REMOVE",
     TRUE                                                ~ infection_severity
   )) |> 
-  mutate(infection_type = case_when(
-    date_of_infection == date_of_bs_ab_step_up_d1       ~ NA_character_,
-    TRUE                                                ~ infection_type
+  # Filter them out but keep the one in first position to be changed to No
+  filter(infection_n_0_y_1 == "No" |
+           infection_severity != "REMOVE" |
+           is.na(infection_severity) |
+           (infection_severity == "REMOVE" & sequence == "_1")) |> 
+  mutate(date_of_infection = case_when(
+    infection_severity == "REMOVE"                      ~ NA_Date_,
+    TRUE                                                ~ date_of_infection
   )) |> 
   mutate(pathogen = case_when(
-    date_of_infection == date_of_bs_ab_step_up_d1       ~ NA_character_,
+    infection_severity == "REMOVE"                      ~ "empty",
     TRUE                                                ~ pathogen
   )) |> 
-  mutate(date_of_infection = case_when(
-    date_of_infection == date_of_bs_ab_step_up_d1       ~ NA_Date_,
-    TRUE                                                ~ date_of_infection
-  )) |>
-  select(-sequence) |> 
-  arrange(mrn, date_of_infection) |> 
-  # mutate(any_infection = case_when(
-  #   number_of_infections == 0                           ~ "No"
-  # ))
-  group_by(mrn) |> 
-  mutate(number_of_infections = row_number()) |> 
+  mutate(infection_n_0_y_1 = case_when(
+    infection_severity == "REMOVE"                      ~ "No",
+    TRUE                                                ~ infection_n_0_y_1
+  )) |> 
+  mutate(across(c("infection_type", 
+                  "infection_severity"), 
+                ~ case_when(
+    infection_severity == "REMOVE"                      ~ NA_character_,
+    TRUE                                                ~ as.character(.)
+  ))) |> 
+  # Recode number of infection
+  group_by(mrn, patient_identifier) |> 
+  mutate(number_of_infections = n()) |> 
+  mutate(sequence = row_number()) |> 
+  mutate(has_second_infection = case_when(
+    sequence == 2             ~ "Yes"
+  )) |> 
+  fill(has_second_infection, .direction = "updown") |> 
   ungroup() |> 
-  filter(!(number_of_infections > 1 & infection_severity == "REMOVE") |
-           number_of_infections == 0) |> 
-    mutate(number_of_infections = case_when(
-      infection_severity == "REMOVE"            ~ 0,
-      TRUE                                      ~ number_of_infections
-    )) |> 
-    mutate(infection_severity = na_if(infection_severity, "REMOVE"))
-
-
-
-# calculate time for each infection
-    mutate(time_from_bsab_therapy_to_infection_days = 
-             interval(
+  filter(is.na(has_second_infection) |
+           has_second_infection == "Yes" & infection_n_0_y_1 == "Yes") |> 
+  mutate(number_of_infections = case_when(
+    infection_n_0_y_1 == "No"                           ~ 0,
+    TRUE                                                ~ number_of_infections
+  )) |> 
+  select(-has_second_infection) |> 
+  # calculate time for each infection
+  mutate(time_from_bsab_therapy_to_infection_days = 
+           interval(
              start = date_of_bs_ab_step_up_d1, 
              end = date_of_infection) /
            duration(n=1, units = "days")) |> 
   arrange(mrn, time_from_bsab_therapy_to_infection_days) |> 
-  # pick infection and severity within 30 days
-  mutate(any_infection_d30 = case_when(
-    time_from_bsab_therapy_to_infection_days <= 30 &
-      any_infection == "Yes"                              ~ "Yes"
+  mutate(time_from_bsab_therapy_to_infection_months = 
+           interval(
+             start = date_of_bs_ab_step_up_d1, 
+             end = date_of_infection) /
+           duration(n=1, units = "months")) |> 
+  arrange(mrn, time_from_bsab_therapy_to_infection_days) |> 
+  # Remove placeholder in pathogen
+  mutate(pathogen = na_if(pathogen, "empty")) |> 
+  rename(any_infection = infection_n_0_y_1) |> 
+  mutate(any_sevinfection = case_when(
+    infection_severity == "Yes"                       ~ "Yes"
   )) |> 
-  mutate(any_sevinfection_d30 = case_when(
-    time_from_bsab_therapy_to_infection_days <= 30 &
-      infection_severity == "Yes"                         ~ "Yes"
-  )) |> 
-  # fill Yes per patient
-  group_by(mrn) |> 
-  fill(any_infection_d30, any_sevinfection_d30, .direction = "updown") |> 
+  group_by(mrn, patient_identifier) |> 
+  fill(any_sevinfection, .direction = "updown") |> 
   ungroup() |> 
-  # Add No
-  mutate(any_infection_d30 = case_when(
-      any_infection_d30 == "Yes"                            ~ "Yes",
-    time_from_bsab_therapy_to_infection_days > 30     ~ "No",
-    any_infection == "No"                               ~ "No"
+  mutate(any_sevinfection = case_when(
+    any_sevinfection == "Yes"                         ~ "Yes",
+    any_infection == "Yes" &
+      is.na(infection_severity)                       ~ "Unknown"
   )) |> 
-  mutate(any_sevinfection_d30 = case_when(
-      any_sevinfection_d30 == "Yes"                         ~ "Yes",
-    time_from_bsab_therapy_to_infection_days > 30      ~ "No",
-    infection_severity == "No"                            ~ "No"
+  group_by(mrn, patient_identifier) |> 
+  fill(any_sevinfection, .direction = "updown") |> 
+  ungroup() |> 
+  mutate(any_sevinfection = case_when(
+    any_sevinfection == "Yes"                         ~ "Yes",
+    any_sevinfection == "Unknown"                     ~ NA_character_,
+    infection_severity == "No"                        ~ "No"
   )) |> 
-  # pick type of infection within 30 days
-    mutate(infection_type_d30 = case_when(
-      time_from_bsab_therapy_to_infection_days <= 30   ~ infection_type
-    )) |> 
-  select(mrn, any_infection_d30, any_sevinfection_d30, infection_type_d30) |> 
-  arrange(mrn, infection_type_d30) |> 
-  group_by(mrn, any_infection_d30, any_sevinfection_d30) |> 
-  summarise_at(vars(infection_type_d30), str_c, collapse = "; ") |> 
+  group_by(mrn, patient_identifier) |> 
+  fill(any_sevinfection, .direction = "updown") |> 
   ungroup()
 
-bsab_data1 <- bsab_data |> 
-  left_join(bsab_inf, by = "mrn") |> 
-  select(mrn, any_infection, any_sevinfection, any_infection_d30, any_sevinfection_d30, infection_type_d30)
-  mutate(any_infection_d30 = coalesce(any_infection_d30, any_infection)) |> 
-  mutate(any_sevinfection_d30 = case_when(
-      any_sevinfection_d30 == "Yes"                         ~ "Yes",
-    time_from_bsab_therapy_to_infection_days > 30      ~ "No",
-    infection_severity == "No"                            ~ "No"
-  )) |> 
+bsab_inf_wide <-
+  bsab_inf |> 
+  pivot_wider(id_cols = c(mrn, patient_identifier, date_of_bs_ab_step_up_d1,
+                          number_of_infections, any_infection, any_sevinfection), 
+              names_from = c(sequence),
+              values_from = c(pathogen, infection_type, date_of_infection, infection_severity, 
+                          time_from_bsab_therapy_to_infection_days,
+                          time_from_bsab_therapy_to_infection_months),
+              names_vary = "slowest",
+              names_glue = "{.value}_{sequence}"
+              ) |> 
+  select(-date_of_bs_ab_step_up_d1)
+
+bsab_data <- data8 |> 
+  # Remove varaibles that I have re-done
+  select(-c(pathogen, number_of_infections, infection_n_0_y_1,
+         starts_with("infection_type_"), starts_with("date_of_infection_"), 
+         starts_with("infection_severity_"))) |> 
+  left_join(bsab_inf_wide, by = c("mrn", "patient_identifier")) #|> 
+  # select(mrn, any_infection, any_sevinfection, any_infection_d30, any_sevinfection_d30, infection_type_d30)
+  # mutate(any_infection_d30 = coalesce(any_infection_d30, any_infection)) |> 
+  # mutate(any_sevinfection_d30 = case_when(
+  #     any_sevinfection_d30 == "Yes"                         ~ "Yes",
+  #   time_from_bsab_therapy_to_infection_days > 30      ~ "No",
+  #   infection_severity == "No"                            ~ "No"
+  # )) |> 
 
 
 
@@ -1394,13 +1566,55 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              race = "Race",
                              ethnicity = "Ethnicity",
                              raceeth = "Race and ethnicity",
-                             # # extramedullary_disease_yes_no = "Extramedullary disease",
-                             # # circulating_plasma_cell = "UPDATED Circulating Plasma Cells",
-                             high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation =
-                               "High marrow burden (≥50%)",
+                             weight_at_initiation_of_bs_ab_kg = "Weight at initiation (kg)",
+                             weight_cat = "Weight at initiation (kg, categorical)",
+                             iss_at_diagnosis = "iss at diagnosis",
+                             iss_at_index = "iss at index",
+                             r_iss_at_diagnosis = "R-iss at diagnosis",
+                             r_iss_at_index = "R-iss at index",
                              ecog_ps_at_bs_ab_initiation_0_5 = "ECOG PS at therapy initiation",
                              ecog_ps_at_bs_ab_initiation_0_5_cat = "ECOG PS at therapy initiation (categorical)",
+                             cytogenetics = "High risk cytogenetics (before 2026)",
+                             high_risk_cyto_newdef = "High risk cytogenetics (New definition)",
+                             cytogenetics_doublehit = "High risk cytogenetics (Double hit)",
+                             deletion_17p_prior_to_bs_ab_0_no_1_yes = "Deletion 17p at initiation",
+                             t_4_14_prior_to_bs_ab_0_no_1_yes = "t(4:14) at initiation",
+                             t_14_16_prior_to_bs_ab_0_no_1_yes = "t(4:16) at initiation",
+                             gain_amp1q21_prior_to_bs_ab_0_no_1_yes = "Gain/amp 1q21",
+                             amp_1_q_only_0_no_1_yes = "Amp 1q only",
+                             deletion_1p_0_no_1_yes = "Deletion 1p",
+                             true_emd_prior_bsab = "True EMD prior to BsAb initiation",
+                             baseline_anemia = "Baseline anemia",
+                             baseline_crcl30 = "Baseline Crcl (categorical)",
+                             baseline_crcl40 = "Baseline Crcl (categorical)",
+                             hemodialysis_pre_bs_ab_y_1_n_0 = "Hemodialysis pre-BsAb",
+                             ldh_elevated_at_index = "Elevated LDH (categorical)",
+                             baseline_hypogammaglobulinemia = "Prior hypogammaglobulinemia",
+                             baseline_neutropenia = "Baseline neutropenia",
+                             eligible_for_tec_trial = "Eligible for Teclistamab BsAb trial on first dose",
+                             eligible_for_talq_trial = "Eligible for Talquetamab BsAb trial on first dose",
                              time_from_MM_to_bsab_months = "Time from MM diagnosis to BsAb (months)",
+                             high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation =
+                               "High marrow burden (≥50%)",
+                             
+                             bortezomib_status_refractory = "Refractory to Bortezomib",
+                             carfilzomib_status_refractory = "Refractory to Carfilzomib",
+                             proteasome = "Refractory to Proteasome Inhibitors",
+                             bortezomib_status_exposed = "Exposed to Bortezomib",
+                             carfilzomib_status_exposed = "Exposed to Carfilzomib",
+                             lenalidomide_status_refractory = "Refractory to Lenalidomide",
+                             pomalidomide_status_refractory = "Refractory to Pomalidomide",
+                             immuno = "Refractory to Immunomodulators", 
+                             doubleref = "Double refractory",
+                             lenalidomide_status_exposed = "Exposed to Lenalidomide",
+                             pomalidomide_status_exposed = "Exposed to Pomalidomide",
+                             dara = "Refractory to Daratumumab or Isatuximab",
+                             daratumumab_or_isatuximab_status_exposed = "Exposed to Daratumumab or Isatuximab",
+                             triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1 = "Triple refractory",
+                             tripleref = "Triple refractory (coded)",
+                             penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1= "Penta refractory",
+                             pentaref = "Penta refractory (coded)",
+                             # # circulating_plasma_cell = "UPDATED Circulating Plasma Cells",
                              # duration_of_tec_days = "Duration of BsAb",
                              # # duration_of_tec_days_cat = "Duration of BsAb (cat)",
                              # time_from_tec_to_end_extraction_days = 
@@ -1427,15 +1641,7 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              #   "% CPCs if PB checked within 30 days before BsAb initiation",
                              prophylactic_tocilizumab_n_0_y_1 = "Prophylactic Tocilizumab",
                              # 
-                             cytogenetics = "High risk cytogenetics (not include gain 1q)",
-                             high_risk_cyto_newdef = "High risk cytogenetics (New definition)",
-                             cytogenetics_doublehit = "High risk cytogenetics (Double hit)",
-                             deletion_17p_prior_to_bs_ab_0_no_1_yes = "Deletion 17p at initiation",
-                             t_4_14_prior_to_bs_ab_0_no_1_yes = "t(4:14) at initiation",
-                             t_14_16_prior_to_bs_ab_0_no_1_yes = "t(4:16) at initiation",
-                             gain_amp1q21_prior_to_bs_ab_0_no_1_yes = "Gain/amp 1q21",
-                             amp_1_q_only_0_no_1_yes = "Amp 1q only",
-                             deletion_1p_0_no_1_yes = "Deletion 1p",
+                             
                              number_of_prior_lines_of_therapy_before_bs_ab = "Number of prior lines of therapy",
                              number_of_prior_lines_of_therapy_before_bs_ab_cat = "Number of prior lines of therapy (cat)",
                              # bridging_therapy_yes_no = "Bridging Therapy",
@@ -1443,7 +1649,9 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              # prior_allo_sct_within_6_months_before_apheresis = "Prior alloSCT",
                              prior_bcma_directed_therapy_no_0_y_1 = "Prior BCMA-directed therapy",
                              type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3 = "Type most recent BCMA agent",
-                             # most_recent_bcma_agent_name = "Name most recent BCMA agent",
+                             most_recent_bcma_agent_name = "Name most recent BCMA agent",
+                             if_prior_cart_which_one_s = "Prior CART name",
+                             
                              response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6 =
                                "Response most recent BCMA agent",
                              need_for_gcsf = "Granulocyte colony stimulating factor (G-CSF)",
@@ -1456,23 +1664,13 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              steroid_use_as_tx_n_0_y_1 = "Steroid Use", 
                              tocilizumab_as_tx_n_0_y_1 = "Tocilizumab Use", 
                              anakinra_n_0_y_1 = "Anakinra Use",
-                             proteasome = "Refractory to Proteasome Inhibitors",
-                             lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Lenalidomide",
-                             bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Bortezomib",
-                             carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Carfilzomib",
-                             pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2 = "Refractory to Pomalidomide",
-                             dara = "Refractory to Daratumumab or Isatuximab",
-                             immuno = "Refractory to Immunomodulators", doubleref = "Double refractory",
-                             triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1= "Triple refractory",
-                             penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1= "Penta refractory",
-                             pentaref = "Penta refractory",
+                             
                              
                              baseline_anc_k_u_l_ie_100_200_etc = "Baseline ANC (k/ul, ie. 100, 200, etc)",
                              baseline_hgb = "Baseline HGB",
                              baseline_pl_ts = "baseline PLTs",
                              baseline_alc_k_u_l_ie_100_200_etc = "Baseline ALC (k/ul, ie. 100, 200, etc)",
                              baseline_cr_cl_m_l_min = "Baseline CrCl (ml/min)",
-                             hemodialysis_pre_bs_ab_y_1_n_0 = "Hemodialysis pre-BsAb",
                              # hemodialysis_post_bs_ab_y_1_n_0 = "Hemodialysis post-BsAb",
                              baseline_b2m_prior_to_bs_ab_initiation = "Baseline B2M prior to therapy",
                              baseline_ldh_prior_to_bs_ab_initiation_u_l = "Baseline LDH prior to therapy (u/l)",
@@ -1482,7 +1680,9 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              baseline_crp_prior_to_bs_ab_initiation_mg_l = "Baseline CRP prior to therapy (mg/l)",
                              max_crp = "Max CRP",
                              baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l = "Baseline Igg prior to therapy (mg/dl)",
-                             hypogammaglobulinemia = "Hypogammaglobulinemia",
+                             
+         
+         
                              cytopenia_baseline = "Any Cytopenia (baseline)",
                              gr3_cytopenia_baseline = "Any Grade3+ Cytopenia (baseline)",
                              # alc_day_8 = "ALC day8",
@@ -1507,8 +1707,7 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              prior_gprc5d_yes_no = "Prior GPRC5D",
                              # talquetamab_toxicities_oral_toxicities_e_g_dysgeusia_if_so_describe =
                              #   "Talquetamab toxicities",
-                             true_emd_prior_bsab =
-                               "True EMD prior to BsAb initiation",
+                             
                              # total_number_true_emd_plasmacytomas_if_1_2_sites_write_1_or_2_if_2_plasmacytomas_just_write_3 =
                              #   "Total number true EMD",
                              # locations_of_true_emd_be_specific = "Locations of true EMD",
@@ -1545,7 +1744,7 @@ var_label(bsab_data) <- list(age_at_bs_ab_initiation = "Patient age", age_cat = 
                              # overall_hlh = "Combined HLHs",
                              any_infection = "Any infection",
                              any_sevinfection = "Any severe infection",
-                             time_from_bsab_therapy_to_1st_infection_days = "Time from BsAb to 1st infection (days)",
+                             time_from_bsab_therapy_to_infection_days_1 = "Time from BsAb to 1st infection (days)",
                              number_of_infections = "Total number of infections (if any)",
                              infection_type_1 = "Infection type (1st)",
                              infection_severity_1 = "Infection severity (1st)",
@@ -1648,16 +1847,30 @@ bsab_data %>%
 ## Table Clinical
 ```{r Table Clinical}
 bsab_data %>% 
-  select(ecog_ps_at_bs_ab_initiation_0_5,
+  select(iss_at_diagnosis, iss_at_index,
+         r_iss_at_diagnosis, r_iss_at_index,
+         ecog_ps_at_bs_ab_initiation_0_5,
          ecog_ps_at_bs_ab_initiation_0_5_cat,
-         cytogenetics, high_risk_cyto_newdef, cytogenetics_doublehit,
          deletion_17p_prior_to_bs_ab_0_no_1_yes,
          t_4_14_prior_to_bs_ab_0_no_1_yes, t_14_16_prior_to_bs_ab_0_no_1_yes, gain_amp1q21_prior_to_bs_ab_0_no_1_yes,
          amp_1_q_only_0_no_1_yes, deletion_1p_0_no_1_yes,
-         eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1,
-         h_o_plasma_cell_leukemia_no_0_yes_1,
+         cytogenetics, high_risk_cyto_newdef, #cytogenetics_doublehit,
          true_emd_prior_bsab, true_emd_prior_bsab_type,
+         h_o_plasma_cell_leukemia_no_0_yes_1,
          
+         baseline_anemia,
+         baseline_crcl30, baseline_crcl40,
+         hemodialysis_pre_bs_ab_y_1_n_0,
+         ldh_elevated_at_index,
+         baseline_hypogammaglobulinemia,
+         baseline_neutropenia,
+         bs_ab_name_tec_1_tal_2_elra_3_linvo_4,
+         eligible_for_tec_trial, eligible_for_talq_trial,
+         eligible_for_corresponding_bs_ab_trial_on_first_dose_use_trial_elig_sheet_to_help_you_no_0_y_1,
+         time_from_MM_to_bsab_months,
+         high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation,
+         
+         baseline_crp_prior_to_bs_ab_initiation_mg_l,
          baseline_ferritin_prior_to_bs_ab_initiation_ng_m_l,
          baseline_b2m_prior_to_bs_ab_initiation, 
          baseline_cr_cl_m_l_min, 
@@ -1667,10 +1880,7 @@ bsab_data %>%
          baseline_anc_k_u_l_ie_100_200_etc,
          baseline_alc_k_u_l_ie_100_200_etc,
          baseline_ig_g_prior_to_bs_ab_initiation_mg_d_l,
-         hypogammaglobulinemia,
          
-         time_from_MM_to_bsab_months,
-         high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation,
          prophylactic_tocilizumab_n_0_y_1
          ) %>%
   tbl_summary(by = prophylactic_tocilizumab_n_0_y_1,
@@ -1693,23 +1903,40 @@ bsab_data %>%
 ## Table Treatment history
 ```{r Table Treatment history}
 bsab_data %>% 
-  select(bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2, carfilzomib_status_exposed_0_vs_refractory_1_vs_naive_2, 
+  select(bortezomib_status_exposed_0_vs_refractory_1_vs_naive_2, 
+         bortezomib_status_refractory,
+         carfilzomib_status_refractory, 
          proteasome, 
-         lenalidomide_status_exposed_0_vs_refractory_1_vs_naive_2, pomalidomide_status_exposed_0_vs_refractory_1_vs_naive_2, 
+         bortezomib_status_exposed,
+         carfilzomib_status_exposed, 
+         lenalidomide_status_refractory, 
+         pomalidomide_status_refractory, 
          immuno, 
-         dara, 
          doubleref, 
-         triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1, 
-         penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1,
-         prior_cart_0_no_1_yes, if_prior_cart_which_one_s,
-         prior_adc_no_0_yes_1, if_prior_adc_which_one_s, 
+         lenalidomide_status_exposed, 
+         pomalidomide_status_exposed, 
+         dara, 
+         daratumumab_or_isatuximab_status_exposed, 
+         triple_class_refractory_i_mi_d_pi_anti_cd38_no_0_y_1, tripleref, tripleexp,
+         penta_refractory_2_p_is_2_i_mi_ds_anti_cd38_no_0_y_1, pentaref, pentaexp,
+         
+         
          prior_bcma_directed_therapy_no_0_y_1, 
          type_of_most_recent_bcma_agent_adc_1_cart_2_bs_ab_3, most_recent_bcma_agent_name, 
-         response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6, prior_gprc5d_yes_no,
-         number_of_prior_lines_of_therapy_before_bs_ab_cat,
-         number_of_prior_lines_of_therapy_before_bs_ab, prior_auto_sct_no_0_yes_1, 
-         
+         response_to_most_recent_bmca_agent_cr_1_vgpr_2_pr_3_sd_4_pd_5_ne_6, 
+         prior_cart_0_no_1_yes, if_prior_cart_which_one_s,
+         prior_gprc5d_yes_no,
          time_most_recent_bcma_to_initiation_days, time_last_gprc5d_to_initiation_days,
+         prior_adc_no_0_yes_1, if_prior_adc_which_one_s, 
+         number_of_prior_lines_of_therapy_before_bs_ab_cat,
+         number_of_prior_lines_of_therapy_before_bs_ab, 
+         prior_auto_sct_no_0_yes_1, 
+         
+         steroid_use_as_tx_n_0_y_1, 
+         tocilizumab_as_tx_n_0_y_1, 
+         anakinra_n_0_y_1,
+         ivig_n_0_y_1, need_for_gcsf, need_for_tpo_agonist,
+         
          prophylactic_tocilizumab_n_0_y_1,
          ) %>%
   tbl_summary(by = prophylactic_tocilizumab_n_0_y_1,
@@ -1739,17 +1966,29 @@ bsab_data %>%
          recurrent_crs_n_0_y_1, 
          day_of_onset_crs_relative_to_initiation_days, 
          day_of_max_crs_relative_to_initiation, 
-         crs_14d, crs_30d, max_crs_grade_d14, max_crs_grade_d30, recurrent_crs_d14, recurrent_crs_d30, time_onset_crs_to_initiation_cat,
+         # crs_14d, crs_30d, max_crs_grade_d14, max_crs_grade_d30, recurrent_crs_d14, recurrent_crs_d30, 
+         time_onset_crs_to_initiation_cat,
          max_icans_grade, icans_any, 
          icans_gradecat2, gr2_icans, 
          icans_gradecat3, gr3_icans, 
          duration_of_icans_days,
          day_of_onset_icans_relative_to_initiation_days, day_of_max_icans_grade_relative_to_initiation,
-         icans_14d, icans_30d, max_icans_grade_d14, max_icans_grade_d30, time_onset_icans_to_initiation_cat,
-         concurent_crs_icans_d14,
+         # icans_14d, icans_30d, max_icans_grade_d14, max_icans_grade_d30, 
+         time_onset_icans_to_initiation_cat,
+         # concurent_crs_icans_d14,
          
+         oral_toxicity, oral_toxicities_e_g_dysgeusia_if_so_describe,
+         nail_toxicity, nail_toxicities_if_so_describe,
+         skin_toxicity, skin_toxicities_if_so_describe,
+         contains("weight_change"), contains("weight_loss"),
          
          bs_ab_sud_inpatient_0_bs_ab_sup_outpatient_1,
+         unplanned_admission_after_op_sud_reason,
+         icu_admission_during_first_cycle_n_0_y_1,
+         days_of_icu_admission,
+         days_of_hospital_stay_days,
+         inpatient_length_of_hospital_stay_days,
+         
          prophylactic_tocilizumab_n_0_y_1) %>%
   tbl_summary(by = prophylactic_tocilizumab_n_0_y_1,
               type = list(
@@ -1772,13 +2011,13 @@ bsab_data %>%
 ```{r table Infections}
 bsab_data %>%
   select(any_infection, any_sevinfection,
-         time_from_bsab_therapy_to_1st_infection_days,
+         time_from_bsab_therapy_to_infection_days_1,
          number_of_infections, 
          infection_type_1, infection_severity_1,
          infection_type_2, infection_severity_2,
          infection_type_3, infection_severity_3,
          infection_type_4, infection_severity_4,
-         infection_type_d30,
+         # infection_type_d30,
          
          
          prophylactic_tocilizumab_n_0_y_1) %>%
@@ -1799,7 +2038,7 @@ bsab_data %>%
 
 # long_infection_data <- bsab_data %>%
 #   select(patient_identifier, #date_of_bs_ab_step_up_d1,
-#          time_from_bsab_therapy_to_1st_infection_days,
+#          time_from_bsab_therapy_to_infection_days_1,
 #          time_from_bsab_therapy_to_1st_infection_months,
 #          pfs_time_from_initiation_months,
 #          pathogen,
@@ -1821,7 +2060,7 @@ bsab_data %>%
 #   #   "bacterial_viral_fungal|_severe_hospitalization_or_requiring_iv_antibiotics") %>%
 #   #     str_replace(., "number_", "type_")) %>%
 #   pivot_longer(cols = -c(patient_identifier, #date_of_bs_ab_step_up_d1,
-#                          prophylactic_tocilizumab_n_0_y_1, time_from_bsab_therapy_to_1st_infection_days,
+#                          prophylactic_tocilizumab_n_0_y_1, time_from_bsab_therapy_to_infection_days_1,
 #                          time_from_bsab_therapy_to_1st_infection_months,
 #                          pfs_time_from_initiation_months,
 #                          infection_n_0_y_1#, number_of_infections
@@ -1857,7 +2096,7 @@ bsab_data %>%
 #   select(-sequence, -pathogen_) %>%
 #   distinct() %>%
 #   group_by(patient_identifier, 
-#            time_from_bsab_therapy_to_1st_infection_days,
+#            time_from_bsab_therapy_to_infection_days_1,
 #            time_from_bsab_therapy_to_1st_infection_months,
 #            pfs_time_from_initiation_months,
 #            prophylactic_tocilizumab_n_0_y_1,
@@ -1879,7 +2118,7 @@ bsab_data %>%
 # #     !is.na(infection_n_0_y_1)                    ~ "No"
 # #   ), .after = infection_n_0_y_1) %>%
 #   select(any_infection, any_severe_infection,
-#          time_from_bsab_therapy_to_1st_infection_days,
+#          time_from_bsab_therapy_to_infection_days_1,
 #          total_number_of_infection,
 #          infection_type,
 #          prophylactic_tocilizumab_n_0_y_1) %>%
@@ -1903,7 +2142,7 @@ bsab_data %>%
 #   select(patient_identifier,
 #          infection_n_0_y_1, number_of_infections,
 #          infection_1_type,
-#          infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics, time_from_bsab_therapy_to_1st_infection_days,
+#          infection_severity_1st_severe_hospitalization_or_requiring_iv_antibiotics, time_from_bsab_therapy_to_infection_days_1,
 #          infection_2_type,
 #          infection_severity_2nd_severe_hospitalization_or_requiring_iv_antibiotics,
 #          infection_3_type,
@@ -1925,6 +2164,14 @@ bsab_data %>%
 #   bold_labels() %>% add_stat_label() %>% add_p() %>% bold_p(t = 0.05) %>% add_overall()
 ```
 
+## Table Other adverse events within 14 days post index
+```{r}
+
+```
+
+
+
+
 ## Table 5. Responses
 ```{r Table 7}
 bsab_data %>% 
@@ -1943,6 +2190,11 @@ bsab_data %>%
          # best_response_mrd_flow_positive_vs_negative, 
          # best_response_mrd_clonoseq_positive_vs_negative,
          best_MRD_response, best_response_CR_MRD,
+         
+         discontinuation_yes_no,
+         reason_for_discontinuation_pd_1_toxicity_2_ongoing_response_3_death_4_other_5_explain,
+         time_from_bsab_to_discontinuation,
+         
          prophylactic_tocilizumab_n_0_y_1) %>%
   tbl_summary(by = prophylactic_tocilizumab_n_0_y_1,
               type = list(all_dichotomous() ~ "categorical"),
