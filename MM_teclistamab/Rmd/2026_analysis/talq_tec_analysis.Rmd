@@ -1428,9 +1428,14 @@ a <- data7 |>
 data8 <- data7 |>
   mutate(pathogen = case_when(
     infection_n_0_y_1 == "No" &
-      pathogen == "pneumonia"         ~ NA_character_,
-    pathogen == "Rhinovirus/PNA"      ~ "Rhinovirus, PNA",
-    TRUE                              ~ pathogen
+      pathogen == "pneumonia"              ~ NA_character_,
+    pathogen == "Rhinovirus/PNA"           ~ "Rhinovirus, PNA",
+    TRUE                                   ~ pathogen
+  )) |> 
+  mutate(infection_type_1 = case_when(
+    str_detect(infection_type_1, "Uri")    ~ "Viral",
+    infection_type_1 == "Viral, bacterial" ~ "Viral/bacterial",
+    TRUE                                   ~ infection_type_1
   ))
   # Add data we requested to fill the blank on 4 patients
   # select(mrn, patient_identifier, date_of_bs_ab_step_up_d1, pathogen, number_of_infections, infection_n_0_y_1,
