@@ -1051,6 +1051,33 @@ data6 <- data5 %>%
   mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = str_replace(
     cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain,
     "5", "Other")) |>
+  # mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = str_replace(
+  #   cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain,
+  #   "mm", "MM progression")) |>
+  
+  mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = case_when(
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain %in% c(
+      "Other (cardiac arrest)",
+      "Other (death due to hemorrhagic shock from recurrent retroperitoneal bleeding)",
+      "Other (due to mm progression)",
+      "Other (due to mm progressive intracranial hemorrhage)",
+      "Other (infection and mm)",
+      "Other (mm)",
+      # "Other (opted in for palliative care)",
+      "Other (respiratory failure, mm)",
+      "PD"
+      )                                                              ~ "MM progression",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain %in% c(
+      "Other (emd lung, respiratory failure), Infection",
+      "Other (infection)",
+      "PD, Other(acute hypoxic respiratory failure, septic shock)"
+      )                                                              ~ "Infection",
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain ==
+      "Other (unknown)"                                              ~ NA_character_,
+    cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain ==
+      "Other (opted in for palliative care)"                         ~ NA_character_,
+    TRUE     ~ cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain
+  )) |> 
 
   # mutate(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain = case_when(
   #   cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain == 1        ~ "PD",
@@ -2487,6 +2514,84 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, os_event) ~ prophylactic
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - OS
+```{r}
+# tbl1 <- tbl_uvregression(
+#   bsab_data,
+#   method = coxph,
+#   y = Surv(time = os_time_from_initiation_months, event = os_event),
+#   exponentiate = TRUE,
+#   include = c("prophylactic_tocilizumab_n_0_y_1",
+#               "high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation", 
+#               "r_iss_at_index",
+#               "high_risk_cyto_newdef", "true_emd_prior_bsab",
+#               "pentaref"),
+#   pvalue_fun = label_style_pvalue(digits = 2)
+#   ) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   bold_labels() %>% italicize_levels() %>%
+#   modify_spanning_header(everything() ~ "**OS**")
+# 
+# tbl2 <- coxph(Surv(time = bsab_data$os_time_from_initiation_months,
+#                    event = bsab_data$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+#                 high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation + 
+#                 r_iss_at_index +
+#                 pentaref,
+#               data = bsab_data)  %>%
+#   tbl_regression(exponentiate = TRUE) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**OS**")
+# 
+# tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+
+
+
+
+
+# tbl1 <- tbl_uvregression(
+#   bsab_data,
+#   method = coxph,
+#   y = Surv(time = os_time_from_initiation_months, event = os_event),
+#   exponentiate = TRUE,
+#   include = c("prophylactic_tocilizumab_n_0_y_1",
+#               "high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation", 
+#               "r_iss_at_index",
+#               "high_risk_cyto_newdef", "true_emd_prior_bsab",
+#               "pentaref"),
+#   pvalue_fun = label_style_pvalue(digits = 2)
+#   ) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   bold_labels() %>% italicize_levels() %>%
+#   modify_spanning_header(everything() ~ "**OS**")
+
+# tbl2 <- 
+  coxph(Surv(time = bsab_data$os_time_from_initiation_months,
+                   event = bsab_data$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                pentaref,
+              data = bsab_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+
+# tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+
+coxph(Surv(time = bsab_data$os_time_from_initiation_months,
+                   event = bsab_data$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+```
 
 
 #### PFS
@@ -2550,15 +2655,92 @@ ggsurvplot(survfit(Surv(pfs_time_from_initiation_months, pfs_event) ~ prophylact
 ```
 
 
-### NRM
-NRM is defined as any death in the absence of progression.
+#### MVA - PFS
+```{r}
+# tbl1 <- tbl_uvregression(
+#   bsab_data,
+#   method = coxph,
+#   y = Surv(time = pfs_time_from_initiation_months, event = pfs_event),
+#   exponentiate = TRUE,
+#   include = c("prophylactic_tocilizumab_n_0_y_1",
+#               "high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation", 
+#               "r_iss_at_index",
+#               "high_risk_cyto_newdef", "true_emd_prior_bsab",
+#               "number_of_prior_lines_of_therapy_before_bs_ab_cat"),
+#   pvalue_fun = label_style_pvalue(digits = 2)
+#   ) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   bold_labels() %>% italicize_levels() %>%
+#   modify_spanning_header(everything() ~ "**PFS**")
+# 
+# tbl2 <- coxph(Surv(time = bsab_data$pfs_time_from_initiation_months,
+#                    event = bsab_data$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+#                 high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation + 
+#                 r_iss_at_index +
+#                 number_of_prior_lines_of_therapy_before_bs_ab_cat,
+#               data = bsab_data)  %>%
+#   tbl_regression(exponentiate = TRUE) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   modify_spanning_header(everything() ~ "**PFS**")
+# 
+# tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+
+
+
+# tbl1 <- tbl_uvregression(
+#   bsab_data,
+#   method = coxph,
+#   y = Surv(time = pfs_time_from_initiation_months, event = pfs_event),
+#   exponentiate = TRUE,
+#   include = c("prophylactic_tocilizumab_n_0_y_1",
+#               "high_marrow_burden_50_percent_p_cs_if_checked_within_30_days_before_bs_ab_initiation", 
+#               "r_iss_at_index",
+#               "high_risk_cyto_newdef", "true_emd_prior_bsab",
+#               "number_of_prior_lines_of_therapy_before_bs_ab_cat"),
+#   pvalue_fun = label_style_pvalue(digits = 2)
+#   ) %>%
+#   bold_p(t = .05) %>%
+#   add_nevent(location = "level") %>% add_n(location = "level") %>%
+#   bold_labels() %>% italicize_levels() %>%
+#   modify_spanning_header(everything() ~ "**PFS**")
+
+# tbl2 <- 
+  coxph(Surv(time = bsab_data$pfs_time_from_initiation_months,
+                   event = bsab_data$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                pentaref,
+              data = bsab_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+
+# tbl_merge(list(tbl1, tbl2), tab_spanner = c("**Univariable**", "**Multivariable**"))
+
+coxph(Surv(time = bsab_data$pfs_time_from_initiation_months,
+                   event = bsab_data$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+```
+
+<!-- ### NRM -->
+<!-- NRM is defined as any death in the absence of progression. -->
 ```{r, fig.height=6}
 nrm_curves <- bsab_data %>%
   mutate(nrm_response = case_when(
     os_event == 0                        ~ 0,
 
     os_event == 1 &
-      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|mm")
+      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|MM")
                                          ~ 0,# 0
     os_event == 1 &
       !is.na(date_of_pd)                 ~ 0,# 0
@@ -2569,36 +2751,94 @@ nrm_curves <- bsab_data %>%
   # select(patient_identifier, os_event, os_time_from_initiation_months, nrm_response,
   #        date_of_last_contact, date_of_pd, cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
 
-ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
-                   data=nrm_curves),
-           fun = "event",
-           font.main = c(20, "bold", "black"),
-           font.x = c(12, "plain", "black"),
-           font.y = c(12, "plain", "black"),
-           font.legend = c(10, "plain", "black"),
-           font.tickslab = c(10, "plain", "black"),
-           size = 1.5,
-           surv.median.line = "hv",
-
-           xlab = "Time (months)",
-           ylab = "Cumulative Incidence of NRM",
-           legend = "top", legend.title = "",
-           # legend.labs = c("", "", ""),
-           pval = TRUE, pval.size = 4,
-           conf.int = FALSE,
-           risk.table = TRUE,
-           risk.table.fontsize = 3,
-           tables.y.text = FALSE,
-           tables.theme = theme_classic()+
-             theme(text = element_text(size = 10),
-                   # plot.title = element_text(size = 10),  # Table title ("Number at risk")
-                   axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
-                   axis.title.x = element_text(size = 12)                # X-axis label ("Time")
-             ),
-           # Censor
-           censor = TRUE
-) %++% guides(colour = guide_legend(ncol = 2))
+# ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
+#                    data=nrm_curves),
+#            fun = "event",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(12, "plain", "black"),
+#            font.y = c(12, "plain", "black"),
+#            font.legend = c(10, "plain", "black"),
+#            font.tickslab = c(10, "plain", "black"),
+#            size = 1.5,
+#            surv.median.line = "hv",
+# 
+#            xlab = "Time (months)",
+#            ylab = "Cumulative Incidence of NRM",
+#            legend = "top", legend.title = "",
+#            # legend.labs = c("", "", ""),
+#            pval = TRUE, pval.size = 4,
+#            conf.int = FALSE,
+#            risk.table = TRUE,
+#            risk.table.fontsize = 3,
+#            tables.y.text = FALSE,
+#            tables.theme = theme_classic()+
+#              theme(text = element_text(size = 10),
+#                    # plot.title = element_text(size = 10),  # Table title ("Number at risk")
+#                    axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
+#                    axis.title.x = element_text(size = 12)                # X-axis label ("Time")
+#              ),
+#            # Censor
+#            censor = TRUE
+# ) %++% guides(colour = guide_legend(ncol = 2))
 ```
+
+### Competing risks analysis for NRM
+```{r}
+nrm_curves <- nrm_curves %>%
+  mutate(event_cr = as.factor(case_when(
+    nrm_response == 1 ~ "NRM",
+    pfs_event == 1 ~ "Relapse",
+    pfs_event == 0 ~ "Censored"
+  ))) %>% mutate(
+    cr_time = case_when(
+      event_cr == "NRM" ~ os_time_from_initiation_months,
+      event_cr == "Relapse" | event_cr == "Censored" ~ pfs_time_from_initiation_months
+    ))
+
+ci <- tidycmprsk::cuminc(
+  Surv(cr_time, event_cr) ~ prophylactic_tocilizumab_n_0_y_1,
+  data = nrm_curves
+)
+library(ggsurvfit)
+ci |> 
+  ggcuminc(
+    outcome = c(
+      "NRM"
+    )
+  ) +
+  scale_color_manual(
+    values = c(
+      "No" = "dodgerblue4",
+      "Yes" = "steelblue2"
+    ),
+    guide = guide_legend(nrow = 1,
+    byrow = TRUE
+  )) +
+  add_risktable(risktable_stats = "n.risk") +
+  add_risktable_strata_symbol(
+    symbol = "\U25CF",
+    size = 10
+  ) +
+  labs(
+    x = "Time from infusion (months)" 
+  ) +
+  scale_ggsurvfit() +
+scale_y_continuous(
+  limits = c(NA, 0.1),
+  breaks = c(0, 0.05, 0.1),
+  labels = c("0%", "5%", "10%")
+) +
+  theme(
+  panel.grid = element_blank(),
+  panel.border = element_blank(),
+  axis.line = element_line()
+) + add_pvalue(location = "annotation",
+               caption = "Gray's test, {p.value}",
+               x = 20,
+               y = 0.085)
+rm(nrm_curves)
+```
+
 
 ## B. Stratified analysis for patients receiving Teclistamab as a first treatment
 ```{r}
@@ -3004,7 +3244,30 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, os_event) ~ prophylactic
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - OS
+```{r}
+coxph(Surv(time = bsab_data_tecr$os_time_from_initiation_months,
+           event = bsab_data_tecr$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_tecr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
 
+coxph(Surv(time = bsab_data_tecr$os_time_from_initiation_months,
+                   event = bsab_data_tecr$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_tecr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+```
 
 #### PFS
 Median PFS in months
@@ -3066,16 +3329,43 @@ ggsurvplot(survfit(Surv(pfs_time_from_initiation_months, pfs_event) ~ prophylact
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - PFS
+```{r}
+coxph(Surv(time = bsab_data_tecr$pfs_time_from_initiation_months,
+           event = bsab_data_tecr$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_tecr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
 
-### NRM
-NRM is defined as any death in the absence of progression.
-```{rr, fig.height=6}
+coxph(Surv(time = bsab_data_tecr$pfs_time_from_initiation_months,
+                   event = bsab_data_tecr$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_tecr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+```
+
+
+
+
+<!-- ### NRM -->
+<!-- NRM is defined as any death in the absence of progression. -->
+```{r, fig.height=6}
 nrm_curves <- bsab_data_tecr %>%
   mutate(nrm_response = case_when(
     os_event == 0                        ~ 0,
 
     os_event == 1 &
-      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|mm")
+      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|MM")
                                          ~ 0,# 0
     os_event == 1 &
       !is.na(date_of_pd)                 ~ 0,# 0
@@ -3086,35 +3376,92 @@ nrm_curves <- bsab_data_tecr %>%
   # select(patient_identifier, os_event, os_time_from_initiation_months, nrm_response,
   #        date_of_last_contact, date_of_pd, cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
 
-ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
-                   data=nrm_curves),
-           fun = "event",
-           font.main = c(20, "bold", "black"),
-           font.x = c(12, "plain", "black"),
-           font.y = c(12, "plain", "black"),
-           font.legend = c(10, "plain", "black"),
-           font.tickslab = c(10, "plain", "black"),
-           size = 1.5,
-           surv.median.line = "hv",
+# ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
+#                    data=nrm_curves),
+#            fun = "event",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(12, "plain", "black"),
+#            font.y = c(12, "plain", "black"),
+#            font.legend = c(10, "plain", "black"),
+#            font.tickslab = c(10, "plain", "black"),
+#            size = 1.5,
+#            surv.median.line = "hv",
+# 
+#            xlab = "Time (months)",
+#            ylab = "Cumulative Incidence of NRM",
+#            legend = "top", legend.title = "",
+#            # legend.labs = c("", "", ""),
+#            pval = TRUE, pval.size = 4,
+#            conf.int = FALSE,
+#            risk.table = TRUE,
+#            risk.table.fontsize = 3,
+#            tables.y.text = FALSE,
+#            tables.theme = theme_classic()+
+#              theme(text = element_text(size = 10),
+#                    # plot.title = element_text(size = 10),  # Table title ("Number at risk")
+#                    axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
+#                    axis.title.x = element_text(size = 12)                # X-axis label ("Time")
+#              ),
+#            # Censor
+#            censor = TRUE
+# ) %++% guides(colour = guide_legend(ncol = 2))
+```
 
-           xlab = "Time (months)",
-           ylab = "Cumulative Incidence of NRM",
-           legend = "top", legend.title = "",
-           # legend.labs = c("", "", ""),
-           pval = TRUE, pval.size = 4,
-           conf.int = FALSE,
-           risk.table = TRUE,
-           risk.table.fontsize = 3,
-           tables.y.text = FALSE,
-           tables.theme = theme_classic()+
-             theme(text = element_text(size = 10),
-                   # plot.title = element_text(size = 10),  # Table title ("Number at risk")
-                   axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
-                   axis.title.x = element_text(size = 12)                # X-axis label ("Time")
-             ),
-           # Censor
-           censor = TRUE
-) %++% guides(colour = guide_legend(ncol = 2))
+### Competing risks analysis for NRM
+```{r}
+nrm_curves <- nrm_curves %>%
+  mutate(event_cr = as.factor(case_when(
+    nrm_response == 1 ~ "NRM",
+    pfs_event == 1 ~ "Relapse",
+    pfs_event == 0 ~ "Censored"
+  ))) %>% mutate(
+    cr_time = case_when(
+      event_cr == "NRM" ~ os_time_from_initiation_months,
+      event_cr == "Relapse" | event_cr == "Censored" ~ pfs_time_from_initiation_months
+    ))
+
+ci <- tidycmprsk::cuminc(
+  Surv(cr_time, event_cr) ~ prophylactic_tocilizumab_n_0_y_1,
+  data = nrm_curves
+)
+library(ggsurvfit)
+ci |> 
+  ggcuminc(
+    outcome = c(
+      "NRM"
+    )
+  ) +
+  scale_color_manual(
+    values = c(
+      "No" = "dodgerblue4",
+      "Yes" = "steelblue2"
+    ),
+    guide = guide_legend(nrow = 1,
+    byrow = TRUE
+  )) +
+  add_risktable(risktable_stats = "n.risk") +
+  add_risktable_strata_symbol(
+    symbol = "\U25CF",
+    size = 10
+  ) +
+  labs(
+    x = "Time from infusion (months)" 
+  ) +
+  scale_ggsurvfit() +
+scale_y_continuous(
+  limits = c(NA, 0.1),
+  breaks = c(0, 0.05, 0.1),
+  labels = c("0%", "5%", "10%")
+) +
+  theme(
+  panel.grid = element_blank(),
+  panel.border = element_blank(),
+  axis.line = element_line()
+) + add_pvalue(location = "annotation",
+               caption = "Gray's test, {p.value}",
+               x = 20,
+               y = 0.085)
+rm(nrm_curves)
 ```
 
 ## C. Stratified analysis for patients receiving Talquetamab as a first treatment
@@ -3520,7 +3867,30 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, os_event) ~ prophylactic
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - OS
+```{r}
+coxph(Surv(time = bsab_data_talqr$os_time_from_initiation_months,
+           event = bsab_data_talqr$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_talqr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
 
+coxph(Surv(time = bsab_data_talqr$os_time_from_initiation_months,
+                   event = bsab_data_talqr$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_talqr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+```
 
 #### PFS
 Median PFS in months
@@ -3582,16 +3952,40 @@ ggsurvplot(survfit(Surv(pfs_time_from_initiation_months, pfs_event) ~ prophylact
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - PFS
+```{r}
+coxph(Surv(time = bsab_data_talqr$pfs_time_from_initiation_months,
+           event = bsab_data_talqr$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_talqr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
 
-### NRM
-NRM is defined as any death in the absence of progression.
-```{rr, fig.height=6}
+coxph(Surv(time = bsab_data_talqr$pfs_time_from_initiation_months,
+                   event = bsab_data_talqr$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_talqr)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+```
+
+<!-- ### NRM -->
+<!-- NRM is defined as any death in the absence of progression. -->
+```{r, fig.height=6}
 nrm_curves <- bsab_data_talqr %>%
   mutate(nrm_response = case_when(
     os_event == 0                        ~ 0,
 
     os_event == 1 &
-      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|mm")
+      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|MM")
                                          ~ 0,# 0
     os_event == 1 &
       !is.na(date_of_pd)                 ~ 0,# 0
@@ -3602,35 +3996,92 @@ nrm_curves <- bsab_data_talqr %>%
   # select(patient_identifier, os_event, os_time_from_initiation_months, nrm_response,
   #        date_of_last_contact, date_of_pd, cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
 
-ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
-                   data=nrm_curves),
-           fun = "event",
-           font.main = c(20, "bold", "black"),
-           font.x = c(12, "plain", "black"),
-           font.y = c(12, "plain", "black"),
-           font.legend = c(10, "plain", "black"),
-           font.tickslab = c(10, "plain", "black"),
-           size = 1.5,
-           surv.median.line = "hv",
+# ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
+#                    data=nrm_curves),
+#            fun = "event",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(12, "plain", "black"),
+#            font.y = c(12, "plain", "black"),
+#            font.legend = c(10, "plain", "black"),
+#            font.tickslab = c(10, "plain", "black"),
+#            size = 1.5,
+#            surv.median.line = "hv",
+# 
+#            xlab = "Time (months)",
+#            ylab = "Cumulative Incidence of NRM",
+#            legend = "top", legend.title = "",
+#            # legend.labs = c("", "", ""),
+#            pval = TRUE, pval.size = 4,
+#            conf.int = FALSE,
+#            risk.table = TRUE,
+#            risk.table.fontsize = 3,
+#            tables.y.text = FALSE,
+#            tables.theme = theme_classic()+
+#              theme(text = element_text(size = 10),
+#                    # plot.title = element_text(size = 10),  # Table title ("Number at risk")
+#                    axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
+#                    axis.title.x = element_text(size = 12)                # X-axis label ("Time")
+#              ),
+#            # Censor
+#            censor = TRUE
+# ) %++% guides(colour = guide_legend(ncol = 2))
+```
 
-           xlab = "Time (months)",
-           ylab = "Cumulative Incidence of NRM",
-           legend = "top", legend.title = "",
-           # legend.labs = c("", "", ""),
-           pval = TRUE, pval.size = 4,
-           conf.int = FALSE,
-           risk.table = TRUE,
-           risk.table.fontsize = 3,
-           tables.y.text = FALSE,
-           tables.theme = theme_classic()+
-             theme(text = element_text(size = 10),
-                   # plot.title = element_text(size = 10),  # Table title ("Number at risk")
-                   axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
-                   axis.title.x = element_text(size = 12)                # X-axis label ("Time")
-             ),
-           # Censor
-           censor = TRUE
-) %++% guides(colour = guide_legend(ncol = 2))
+### Competing risks analysis for NRM
+```{r}
+nrm_curves <- nrm_curves %>%
+  mutate(event_cr = as.factor(case_when(
+    nrm_response == 1 ~ "NRM",
+    pfs_event == 1 ~ "Relapse",
+    pfs_event == 0 ~ "Censored"
+  ))) %>% mutate(
+    cr_time = case_when(
+      event_cr == "NRM" ~ os_time_from_initiation_months,
+      event_cr == "Relapse" | event_cr == "Censored" ~ pfs_time_from_initiation_months
+    ))
+
+ci <- tidycmprsk::cuminc(
+  Surv(cr_time, event_cr) ~ prophylactic_tocilizumab_n_0_y_1,
+  data = nrm_curves
+)
+library(ggsurvfit)
+ci |> 
+  ggcuminc(
+    outcome = c(
+      "NRM"
+    )
+  ) +
+  scale_color_manual(
+    values = c(
+      "No" = "dodgerblue4",
+      "Yes" = "steelblue2"
+    ),
+    guide = guide_legend(nrow = 1,
+    byrow = TRUE
+  )) +
+  add_risktable(risktable_stats = "n.risk") +
+  add_risktable_strata_symbol(
+    symbol = "\U25CF",
+    size = 10
+  ) +
+  labs(
+    x = "Time from infusion (months)" 
+  ) +
+  scale_ggsurvfit() +
+scale_y_continuous(
+  limits = c(NA, 0.1),
+  breaks = c(0, 0.05, 0.1),
+  labels = c("0%", "5%", "10%")
+) +
+  theme(
+  panel.grid = element_blank(),
+  panel.border = element_blank(),
+  axis.line = element_line()
+) + add_pvalue(location = "annotation",
+               caption = "Gray's test, {p.value}",
+               x = 20,
+               y = 0.085)
+rm(nrm_curves)
 ```
 <br>
 
@@ -3642,6 +4093,8 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophyla
 # II. Stratified analysis NOT restricted to patients receiving Teclistamab or Talquetamab as a first treatment
 ## A. Stratified analysis for All Teclistamab patients
 ```{r}
+rm(bsab_data_tecr, bsab_data_talqr)
+
 bsab_data_tec <- bsab_data_overlap |> 
   filter(bs_ab_name_tec_1_tal_2_elra_3_linvo_4 == "Teclistamab")
 ```
@@ -4170,7 +4623,30 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, os_event) ~ prophylactic
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - OS
+```{r}
+coxph(Surv(time = bsab_data_tec$os_time_from_initiation_months,
+           event = bsab_data_tec$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_tec)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
 
+coxph(Surv(time = bsab_data_tec$os_time_from_initiation_months,
+                   event = bsab_data_tec$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_tec)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+```
 
 #### PFS
 Median PFS in months
@@ -4232,16 +4708,40 @@ ggsurvplot(survfit(Surv(pfs_time_from_initiation_months, pfs_event) ~ prophylact
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - PFS
+```{r}
+coxph(Surv(time = bsab_data_tec$pfs_time_from_initiation_months,
+           event = bsab_data_tec$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_tec)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
 
-### NRM
-NRM is defined as any death in the absence of progression.
+coxph(Surv(time = bsab_data_tec$pfs_time_from_initiation_months,
+                   event = bsab_data_tec$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_tec)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+```
+
+<!-- ### NRM -->
+<!-- NRM is defined as any death in the absence of progression. -->
 ```{r, fig.height=6}
 nrm_curves <- bsab_data_tec %>%
   mutate(nrm_response = case_when(
     os_event == 0                        ~ 0,
 
     os_event == 1 &
-      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|mm")
+      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|MM")
                                          ~ 0,# 0
     os_event == 1 &
       !is.na(date_of_pd)                 ~ 0,# 0
@@ -4252,35 +4752,92 @@ nrm_curves <- bsab_data_tec %>%
   # select(patient_identifier, os_event, os_time_from_initiation_months, nrm_response,
   #        date_of_last_contact, date_of_pd, cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
 
-ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
-                   data=nrm_curves),
-           fun = "event",
-           font.main = c(20, "bold", "black"),
-           font.x = c(12, "plain", "black"),
-           font.y = c(12, "plain", "black"),
-           font.legend = c(10, "plain", "black"),
-           font.tickslab = c(10, "plain", "black"),
-           size = 1.5,
-           surv.median.line = "hv",
+# ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
+#                    data=nrm_curves),
+#            fun = "event",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(12, "plain", "black"),
+#            font.y = c(12, "plain", "black"),
+#            font.legend = c(10, "plain", "black"),
+#            font.tickslab = c(10, "plain", "black"),
+#            size = 1.5,
+#            surv.median.line = "hv",
+# 
+#            xlab = "Time (months)",
+#            ylab = "Cumulative Incidence of NRM",
+#            legend = "top", legend.title = "",
+#            # legend.labs = c("", "", ""),
+#            pval = TRUE, pval.size = 4,
+#            conf.int = FALSE,
+#            risk.table = TRUE,
+#            risk.table.fontsize = 3,
+#            tables.y.text = FALSE,
+#            tables.theme = theme_classic()+
+#              theme(text = element_text(size = 10),
+#                    # plot.title = element_text(size = 10),  # Table title ("Number at risk")
+#                    axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
+#                    axis.title.x = element_text(size = 12)                # X-axis label ("Time")
+#              ),
+#            # Censor
+#            censor = TRUE
+# ) %++% guides(colour = guide_legend(ncol = 2))
+```
 
-           xlab = "Time (months)",
-           ylab = "Cumulative Incidence of NRM",
-           legend = "top", legend.title = "",
-           # legend.labs = c("", "", ""),
-           pval = TRUE, pval.size = 4,
-           conf.int = FALSE,
-           risk.table = TRUE,
-           risk.table.fontsize = 3,
-           tables.y.text = FALSE,
-           tables.theme = theme_classic()+
-             theme(text = element_text(size = 10),
-                   # plot.title = element_text(size = 10),  # Table title ("Number at risk")
-                   axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
-                   axis.title.x = element_text(size = 12)                # X-axis label ("Time")
-             ),
-           # Censor
-           censor = TRUE
-) %++% guides(colour = guide_legend(ncol = 2))
+### Competing risks analysis for NRM
+```{r}
+nrm_curves <- nrm_curves %>%
+  mutate(event_cr = as.factor(case_when(
+    nrm_response == 1 ~ "NRM",
+    pfs_event == 1 ~ "Relapse",
+    pfs_event == 0 ~ "Censored"
+  ))) %>% mutate(
+    cr_time = case_when(
+      event_cr == "NRM" ~ os_time_from_initiation_months,
+      event_cr == "Relapse" | event_cr == "Censored" ~ pfs_time_from_initiation_months
+    ))
+
+ci <- tidycmprsk::cuminc(
+  Surv(cr_time, event_cr) ~ prophylactic_tocilizumab_n_0_y_1,
+  data = nrm_curves
+)
+library(ggsurvfit)
+ci |> 
+  ggcuminc(
+    outcome = c(
+      "NRM"
+    )
+  ) +
+  scale_color_manual(
+    values = c(
+      "No" = "dodgerblue4",
+      "Yes" = "steelblue2"
+    ),
+    guide = guide_legend(nrow = 1,
+    byrow = TRUE
+  )) +
+  add_risktable(risktable_stats = "n.risk") +
+  add_risktable_strata_symbol(
+    symbol = "\U25CF",
+    size = 10
+  ) +
+  labs(
+    x = "Time from infusion (months)" 
+  ) +
+  scale_ggsurvfit() +
+scale_y_continuous(
+  limits = c(NA, 0.1),
+  breaks = c(0, 0.05, 0.1),
+  labels = c("0%", "5%", "10%")
+) +
+  theme(
+  panel.grid = element_blank(),
+  panel.border = element_blank(),
+  axis.line = element_line()
+) + add_pvalue(location = "annotation",
+               caption = "Gray's test, {p.value}",
+               x = 20,
+               y = 0.085)
+rm(nrm_curves)
 ```
 
 ## B. Stratified analysis for all Talquetamab patients
@@ -4811,7 +5368,30 @@ ggsurvplot(survfit(Surv(os_time_from_initiation_months, os_event) ~ prophylactic
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - OS
+```{r}
+coxph(Surv(time = bsab_data_talq$os_time_from_initiation_months,
+           event = bsab_data_talq$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_talq)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
 
+coxph(Surv(time = bsab_data_talq$os_time_from_initiation_months,
+                   event = bsab_data_talq$os_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_talq)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**OS**")
+```
 
 #### PFS
 Median PFS in months
@@ -4873,16 +5453,40 @@ ggsurvplot(survfit(Surv(pfs_time_from_initiation_months, pfs_event) ~ prophylact
 ) %++% guides(colour = guide_legend(ncol = 2))
 ```
 
+#### MVA - PFS
+```{r}
+coxph(Surv(time = bsab_data_talq$pfs_time_from_initiation_months,
+           event = bsab_data_talq$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+        high_risk_cyto_newdef + 
+        true_emd_prior_bsab +
+        pentaref,
+      data = bsab_data_talq)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
 
-### NRM
-NRM is defined as any death in the absence of progression.
+coxph(Surv(time = bsab_data_talq$pfs_time_from_initiation_months,
+                   event = bsab_data_talq$pfs_event) ~ prophylactic_tocilizumab_n_0_y_1 + 
+                high_risk_cyto_newdef + 
+                true_emd_prior_bsab +
+                number_of_prior_lines_of_therapy_before_bs_ab_cat,
+              data = bsab_data_talq)  %>%
+  tbl_regression(exponentiate = TRUE) %>%
+  bold_p(t = .05) %>%
+  add_nevent(location = "level") %>% add_n(location = "level") %>%
+  modify_spanning_header(everything() ~ "**PFS**")
+```
+
+<!-- ### NRM -->
+<!-- NRM is defined as any death in the absence of progression. -->
 ```{r, fig.height=6}
 nrm_curves <- bsab_data_talq %>%
   mutate(nrm_response = case_when(
     os_event == 0                        ~ 0,
 
     os_event == 1 &
-      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|mm")
+      str_detect(cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain, "1|PD|MM")
                                          ~ 0,# 0
     os_event == 1 &
       !is.na(date_of_pd)                 ~ 0,# 0
@@ -4893,35 +5497,92 @@ nrm_curves <- bsab_data_talq %>%
   # select(patient_identifier, os_event, os_time_from_initiation_months, nrm_response,
   #        date_of_last_contact, date_of_pd, cause_of_death_pd_1_infection_while_of_bs_ab_2_crs_3_icans_4_other_5_explain)
 
-ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
-                   data=nrm_curves),
-           fun = "event",
-           font.main = c(20, "bold", "black"),
-           font.x = c(12, "plain", "black"),
-           font.y = c(12, "plain", "black"),
-           font.legend = c(10, "plain", "black"),
-           font.tickslab = c(10, "plain", "black"),
-           size = 1.5,
-           surv.median.line = "hv",
+# ggsurvplot(survfit(Surv(os_time_from_initiation_months, nrm_response) ~ prophylactic_tocilizumab_n_0_y_1,
+#                    data=nrm_curves),
+#            fun = "event",
+#            font.main = c(20, "bold", "black"),
+#            font.x = c(12, "plain", "black"),
+#            font.y = c(12, "plain", "black"),
+#            font.legend = c(10, "plain", "black"),
+#            font.tickslab = c(10, "plain", "black"),
+#            size = 1.5,
+#            surv.median.line = "hv",
+# 
+#            xlab = "Time (months)",
+#            ylab = "Cumulative Incidence of NRM",
+#            legend = "top", legend.title = "",
+#            # legend.labs = c("", "", ""),
+#            pval = TRUE, pval.size = 4,
+#            conf.int = FALSE,
+#            risk.table = TRUE,
+#            risk.table.fontsize = 3,
+#            tables.y.text = FALSE,
+#            tables.theme = theme_classic()+
+#              theme(text = element_text(size = 10),
+#                    # plot.title = element_text(size = 10),  # Table title ("Number at risk")
+#                    axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
+#                    axis.title.x = element_text(size = 12)                # X-axis label ("Time")
+#              ),
+#            # Censor
+#            censor = TRUE
+# ) %++% guides(colour = guide_legend(ncol = 2))
+```
 
-           xlab = "Time (months)",
-           ylab = "Cumulative Incidence of NRM",
-           legend = "top", legend.title = "",
-           # legend.labs = c("", "", ""),
-           pval = TRUE, pval.size = 4,
-           conf.int = FALSE,
-           risk.table = TRUE,
-           risk.table.fontsize = 3,
-           tables.y.text = FALSE,
-           tables.theme = theme_classic()+
-             theme(text = element_text(size = 10),
-                   # plot.title = element_text(size = 10),  # Table title ("Number at risk")
-                   axis.text.x = element_text(size = 10),                # Time ticks (x-axis)
-                   axis.title.x = element_text(size = 12)                # X-axis label ("Time")
-             ),
-           # Censor
-           censor = TRUE
-) %++% guides(colour = guide_legend(ncol = 2))
+### Competing risks analysis for NRM
+```{r}
+nrm_curves <- nrm_curves %>%
+  mutate(event_cr = as.factor(case_when(
+    nrm_response == 1 ~ "NRM",
+    pfs_event == 1 ~ "Relapse",
+    pfs_event == 0 ~ "Censored"
+  ))) %>% mutate(
+    cr_time = case_when(
+      event_cr == "NRM" ~ os_time_from_initiation_months,
+      event_cr == "Relapse" | event_cr == "Censored" ~ pfs_time_from_initiation_months
+    ))
+
+ci <- tidycmprsk::cuminc(
+  Surv(cr_time, event_cr) ~ prophylactic_tocilizumab_n_0_y_1,
+  data = nrm_curves
+)
+library(ggsurvfit)
+ci |> 
+  ggcuminc(
+    outcome = c(
+      "NRM"
+    )
+  ) +
+  scale_color_manual(
+    values = c(
+      "No" = "dodgerblue4",
+      "Yes" = "steelblue2"
+    ),
+    guide = guide_legend(nrow = 1,
+    byrow = TRUE
+  )) +
+  add_risktable(risktable_stats = "n.risk") +
+  add_risktable_strata_symbol(
+    symbol = "\U25CF",
+    size = 10
+  ) +
+  labs(
+    x = "Time from infusion (months)" 
+  ) +
+  scale_ggsurvfit() +
+scale_y_continuous(
+  limits = c(NA, 0.1),
+  breaks = c(0, 0.05, 0.1),
+  labels = c("0%", "5%", "10%")
+) +
+  theme(
+  panel.grid = element_blank(),
+  panel.border = element_blank(),
+  axis.line = element_line()
+) + add_pvalue(location = "annotation",
+               caption = "Gray's test, {p.value}",
+               x = 20,
+               y = 0.085)
+rm(nrm_curves)
 ```
 <br>
 
